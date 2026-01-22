@@ -17,11 +17,11 @@ FONT_REGULAR_PATH = os.path.join(BASE_DIR, 'Quicksand-VariableFont_wght.ttf')
 
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
-# NUEVA GEOMETRÍA (1080px total)
+# GEOMETRÍA FINAL OPTIMIZADA (1080px total)
 CANVAS_SIZE = 1080
 FRAME_TOP_H = 135  # 12.5%
-IMG_H = 772        # 71.5% (Ajustado para dar espacio abajo)
-FRAME_BOT_H = 173  # 16% (El nuevo "Safe Frame" solicitado)
+IMG_H = 740        # Ajustado para dar más aire abajo
+FRAME_BOT_H = 205  # 19% (El nuevo margen amplio)
 
 @app.route("/generate-post", methods=["POST"])
 def generate_post():
@@ -35,41 +35,43 @@ def generate_post():
     try:
         canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
 
-        # 1. Imagen Central (Ahora de 772px de alto)
+        # 1. Imagen Central
         if img_b64:
             if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
             img_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
             main_img = ImageOps.fit(img_raw, (CANVAS_SIZE, IMG_H), Image.Resampling.LANCZOS)
             canvas.paste(main_img, (0, FRAME_TOP_H))
 
-        # 2. Logo Top (Se mantiene igual)
+        # 2. Logo Top
         if os.path.exists(TEMPLATE_PATH):
             temp = Image.open(TEMPLATE_PATH).convert("RGBA")
             temp = temp.resize((CANVAS_SIZE, CANVAS_SIZE))
             logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_TOP_H))
             canvas.paste(logo_zone, (0, 0), logo_zone)
 
-        # 3. Textos con el nuevo espacio de 16%
+        # 3. Textos (Título 22px / Bullets 20px)
         f_title = ImageFont.truetype(FONT_BOLD_PATH, 22) if os.path.exists(FONT_BOLD_PATH) else ImageFont.load_default()
         f_bullet = ImageFont.truetype(FONT_REGULAR_PATH, 20) if os.path.exists(FONT_REGULAR_PATH) else ImageFont.load_default()
 
         draw = ImageDraw.Draw(canvas)
         
-        # El área de texto empieza después de la imagen (135 + 772 = 907px)
-        y_cursor = (FRAME_TOP_H + IMG_H) + 35 
+        # ELEVACIÓN DEL BLOQUE: Subimos el inicio del texto
+        # El área negra empieza en 875 (135 + 740). 
+        # Ponemos el cursor en 900 para que suba ese "renglón" de espacio.
+        y_cursor = (FRAME_TOP_H + IMG_H) + 25 
         x_margin = 100 
         
         # Título
         draw.text((x_margin, y_cursor), title[:65], font=f_title, fill="white")
         
         # Bullets
-        y_cursor += 42 # Más espacio entre título y bullets
+        y_cursor += 40
         for b in bullets:
             clean_b = str(b).strip()
             if clean_b and "spacer" not in clean_b.lower():
                 txt = clean_b.replace("•", "").strip()[:80]
                 draw.text((x_margin, y_cursor), f"•  {txt}", font=f_bullet, fill="white")
-                y_cursor += 30 # Interlineado más generoso
+                y_cursor += 32 # Interlineado amplio
 
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
