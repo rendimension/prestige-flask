@@ -17,16 +17,17 @@ FONT_REGULAR_PATH = os.path.join(BASE_DIR, 'Quicksand-VariableFont_wght.ttf')
 
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
+# NUEVA GEOMETRÍA (1080px total)
 CANVAS_SIZE = 1080
-FRAME_H = 135  
-IMG_H = 810    
+FRAME_TOP_H = 135  # 12.5%
+IMG_H = 772        # 71.5% (Ajustado para dar espacio abajo)
+FRAME_BOT_H = 173  # 16% (El nuevo "Safe Frame" solicitado)
 
 @app.route("/generate-post", methods=["POST"])
 def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    # Limpieza de textos
     title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").strip()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64", "")
@@ -34,41 +35,41 @@ def generate_post():
     try:
         canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
 
-        # 1. Imagen Central
+        # 1. Imagen Central (Ahora de 772px de alto)
         if img_b64:
             if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
             img_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
             main_img = ImageOps.fit(img_raw, (CANVAS_SIZE, IMG_H), Image.Resampling.LANCZOS)
-            canvas.paste(main_img, (0, FRAME_H))
+            canvas.paste(main_img, (0, FRAME_TOP_H))
 
-        # 2. Logo Top
+        # 2. Logo Top (Se mantiene igual)
         if os.path.exists(TEMPLATE_PATH):
             temp = Image.open(TEMPLATE_PATH).convert("RGBA")
             temp = temp.resize((CANVAS_SIZE, CANVAS_SIZE))
-            logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_H))
+            logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_TOP_H))
             canvas.paste(logo_zone, (0, 0), logo_zone)
 
-        # 3. Textos con Safe Frame
+        # 3. Textos con el nuevo espacio de 16%
         f_title = ImageFont.truetype(FONT_BOLD_PATH, 22) if os.path.exists(FONT_BOLD_PATH) else ImageFont.load_default()
         f_bullet = ImageFont.truetype(FONT_REGULAR_PATH, 20) if os.path.exists(FONT_REGULAR_PATH) else ImageFont.load_default()
 
         draw = ImageDraw.Draw(canvas)
         
-        # Ajuste de coordenadas para no salirse (Safe Frame)
-        y_cursor = 945 + 30 
-        x_margin = 100 # Margen lateral aumentado
+        # El área de texto empieza después de la imagen (135 + 772 = 907px)
+        y_cursor = (FRAME_TOP_H + IMG_H) + 35 
+        x_margin = 100 
         
-        # Dibujar Título (22px)
+        # Título
         draw.text((x_margin, y_cursor), title[:65], font=f_title, fill="white")
         
-        # Dibujar Bullets (20px Regular)
-        y_cursor += 38
+        # Bullets
+        y_cursor += 42 # Más espacio entre título y bullets
         for b in bullets:
             clean_b = str(b).strip()
             if clean_b and "spacer" not in clean_b.lower():
                 txt = clean_b.replace("•", "").strip()[:80]
                 draw.text((x_margin, y_cursor), f"•  {txt}", font=f_bullet, fill="white")
-                y_cursor += 28 # Espacio entre líneas para 20px
+                y_cursor += 30 # Interlineado más generoso
 
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
