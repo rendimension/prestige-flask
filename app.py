@@ -4,6 +4,8 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 import uuid
 import sys
+import base64
+from io import BytesIO
 from urllib.parse import urlparse
 
 print("🧠 Python executable in use:", sys.executable)
@@ -68,6 +70,29 @@ def download_image_to_folder(image_url: str, save_folder: str) -> str:
     return path
 
 
+def save_base64_image(base64_string: str, save_folder: str) -> str:
+    """Save a base64 encoded image to the folder."""
+    # Remove data URL prefix if present (e.g., "data:image/png;base64,")
+    if ',' in base64_string:
+        base64_string = base64_string.split(',', 1)[1]
+    
+    # Decode base64
+    image_data = base64.b64decode(base64_string)
+    
+    # Detect format and save
+    img = Image.open(BytesIO(image_data))
+    ext = '.png' if img.format == 'PNG' else '.jpg'
+    filename = f"{uuid.uuid4().hex}{ext}"
+    path = os.path.join(save_folder, filename)
+    
+    # Convert to RGB if necessary (for JPEG)
+    if ext == '.jpg' and img.mode in ('RGBA', 'P'):
+        img = img.convert('RGB')
+    
+    img.save(path, format='PNG' if ext == '.png' else 'JPEG', quality=95)
+    return path
+
+
 def load_font(path: str, size: int, fallback_bold: str = None):
     try:
         return ImageFont.truetype(path, size=size)
@@ -114,22 +139,18 @@ def fit_cover(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
 # =============================================================================
 # INSTAGRAM-OPTIMIZED LAYOUT CONSTANTS
 # =============================================================================
-# Canvas: 1080x1080 (Instagram square post)
-# Safe zone: 80px padding on all sides (Instagram may crop edges)
-# =============================================================================
-
 CANVAS_W, CANVAS_H = 1080, 1080      # Instagram square format
 
-# Instagram safe zones (content won't be cut off)
-SAFE_PADDING = 80                     # Safe margin from edges
+# Instagram safe zones
+SAFE_PADDING = 80
 
 # Header area (logo from template)
-HEADER_H = 120                        # Space for logo at top
+HEADER_H = 120
 
 # Text band at bottom - LARGER for readability
-TEXT_BAND_H = 380                     # Increased from 280 for bigger text
+TEXT_BAND_H = 380
 
-# Image area (between header and text band)
+# Image area
 IMG_AREA_Y = HEADER_H
 IMG_AREA_H = CANVAS_H - HEADER_H - TEXT_BAND_H
 IMG_AREA_X = 0
@@ -138,22 +159,16 @@ IMG_AREA_W = CANVAS_W
 # =============================================================================
 # TEXT STYLES - OPTIMIZED FOR INSTAGRAM READABILITY
 # =============================================================================
-# Instagram recommended: minimum 30px for body text to be readable on mobile
-# Title: Large and bold for impact
-# Bullets: Clear and readable on small screens
-# =============================================================================
+TITLE_SIZE = 64
+BULLET_SIZE = 34
+PADDING_X = SAFE_PADDING
+TITLE_TOP_PAD = 35
+LINE_SP = 12
+BULLET_GAP = 14
+TEXT_COLOR = (255, 255, 255)
 
-TITLE_SIZE = 64                       # Large title (was 48)
-BULLET_SIZE = 34                      # Readable bullets (was 26)
-PADDING_X = SAFE_PADDING              # Left/right padding (safe zone)
-TITLE_TOP_PAD = 35                    # Space from top of text band
-LINE_SP = 12                          # Line spacing
-BULLET_GAP = 14                       # Gap between bullet lines
-TEXT_COLOR = (255, 255, 255)          # White text
-
-# Dark overlay for text readability
 TEXT_BAND_OVERLAY = True
-BAND_ALPHA = 210                      # Slightly more opaque for contrast
+BAND_ALPHA = 210
 
 
 def draw_text_section(canvas: Image.Image, title: str, bullets: list):
@@ -165,11 +180,9 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
     band_y = CANVAS_H - TEXT_BAND_H
     band_rect = (0, band_y, CANVAS_W, CANVAS_H)
 
-    # Dark overlay for text readability
     if TEXT_BAND_OVERLAY:
         overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
         odraw = ImageDraw.Draw(overlay)
-        # Gradient effect - darker at bottom
         odraw.rectangle(band_rect, fill=(0, 0, 0, BAND_ALPHA))
         canvas_alpha = canvas.convert("RGBA")
         canvas_rgba = Image.alpha_composite(canvas_alpha, overlay)
@@ -177,7 +190,6 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
 
     draw = ImageDraw.Draw(canvas)
 
-    # Text width respects safe zones
     max_w = CANVAS_W - 2 * PADDING_X
 
     # === TITLE ===
@@ -192,7 +204,6 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
     # === BULLETS ===
     bullet_items = [b for b in (bullets or []) if (b or "").strip()]
 
-    # Space between title and bullets
     y += 20
 
     bullet_prefix = "• "
@@ -203,11 +214,9 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
         if not wrapped:
             continue
 
-        # First line with bullet point
         draw.text((PADDING_X, y), bullet_prefix + wrapped[0], font=font_bullet, fill=TEXT_COLOR)
         y += line_h_bullet
 
-        # Continuation lines (indented)
         indent_x = PADDING_X + int(draw.textlength(bullet_prefix, font=font_bullet))
         for cont in wrapped[1:]:
             draw.text((indent_x, y), cont, font=font_bullet, fill=TEXT_COLOR)
@@ -219,9 +228,10 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
 def home():
     return jsonify({
         "service": "Prestige 360 Image Generator",
-        "version": "2.0 - Instagram Optimized",
+        "version": "3.0 - Base64 Support + Instagram Optimized",
         "status": "running",
         "features": [
+            "Accepts image_url OR image_base64",
             "Instagram safe zones (80px padding)",
             "Large readable text (64px title, 34px bullets)",
             "1080x1080 square format"
@@ -237,7 +247,7 @@ def home():
 def health():
     return jsonify({
         "status": "ok",
-        "version": "2.0",
+        "version": "3.0",
         "template_exists": os.path.isfile(TEMPLATE_PATH),
         "post_image_dir": os.path.isdir(POST_IMAGE_DIR),
         "post_output_dir": os.path.isdir(POST_OUTPUT_DIR),
@@ -261,7 +271,12 @@ def send_output(filename):
 @app.route("/generate-post", methods=["POST"])
 def generate_post():
     """
-    Accepts JSON: { "image_url": "...", "title": "...", "bullet1": "...", "bullet2": "...", "bullet3": "..." }
+    Accepts JSON with EITHER:
+      - image_url: URL to download image from
+      - image_base64: Base64 encoded image data
+    
+    Plus: title, bullet1, bullet2, bullet3
+    
     Returns the generated image URL.
     """
     payload = request.get_json(silent=True)
@@ -269,29 +284,39 @@ def generate_post():
         payload = payload[0]
 
     if not isinstance(payload, dict):
-        return jsonify({"error": "Expected JSON object with keys: image_url, title, bullet1, bullet2, bullet3"}), 400
+        return jsonify({"error": "Expected JSON object"}), 400
 
+    # Get image from URL or base64
     image_url = payload.get("image_url") or payload.get("image") or payload.get("image_1")
+    image_base64 = payload.get("image_base64") or payload.get("imageBase64") or payload.get("base64")
+    
     title = payload.get("title", "").strip()
     b1 = payload.get("bullet1", "") or payload.get("bullet_1", "")
     b2 = payload.get("bullet2", "") or payload.get("bullet_2", "")
     b3 = payload.get("bullet3", "") or payload.get("bullet_3", "")
 
-    if not image_url or not title:
-        return jsonify({"error": "image_url and title are required"}), 400
+    if not image_url and not image_base64:
+        return jsonify({"error": "Either image_url or image_base64 is required"}), 400
+    
+    if not title:
+        return jsonify({"error": "title is required"}), 400
 
     if not os.path.isfile(TEMPLATE_PATH):
         return jsonify({"error": f"template.jpg not found at {TEMPLATE_PATH}"}), 500
 
     clear_folder(POST_IMAGE_DIR)
+    
+    # Get the image (from URL or base64)
     try:
-        downloaded_path = download_image_to_folder(image_url, POST_IMAGE_DIR)
+        if image_base64:
+            downloaded_path = save_base64_image(image_base64, POST_IMAGE_DIR)
+        else:
+            downloaded_path = download_image_to_folder(image_url, POST_IMAGE_DIR)
     except Exception as e:
-        return jsonify({"error": f"Failed to download image: {e}"}), 400
+        return jsonify({"error": f"Failed to process image: {e}"}), 400
 
     try:
         template = Image.open(TEMPLATE_PATH).convert("RGB")
-        # Resize template to canvas size if needed
         if template.size != (CANVAS_W, CANVAS_H):
             template = template.resize((CANVAS_W, CANVAS_H), Image.Resampling.LANCZOS)
         
@@ -306,7 +331,6 @@ def generate_post():
         out_path = os.path.join(POST_OUTPUT_DIR, filename)
         template.save(out_path, format="JPEG", quality=95)
 
-        # Get the base URL from the request
         base_url = request.url_root.rstrip('/')
         download_url = f"{base_url}/post_output/{filename}"
         
@@ -315,6 +339,7 @@ def generate_post():
             "filename": filename,
             "output": out_path,
             "download_url": download_url,
+            "source": "base64" if image_base64 else "url",
             "layout": {
                 "canvas": f"{CANVAS_W}x{CANVAS_H}",
                 "title_size": TITLE_SIZE,
