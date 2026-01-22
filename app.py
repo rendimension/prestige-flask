@@ -10,11 +10,12 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
-FONT_PATH = os.path.join(BASE_DIR, 'Montserrat-Bold.ttf') 
+# FUENTES
+FONT_BOLD = os.path.join(BASE_DIR, 'Montserrat-Bold.ttf') 
+FONT_LIGHT = os.path.join(BASE_DIR, 'Quicksand-VariableFont_wght.ttf')
 
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
-# === GEOMETRÍA ESTRICTA 12.5% - 75% - 12.5% ===
 CANVAS_SIZE = 1080
 FRAME_H = 135  
 IMG_H = 810    
@@ -24,56 +25,50 @@ def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    # Limpieza de texto
-    title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").strip()
+    # Limpieza de textos
+    title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").replace("PLANNING", "").strip()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64", "")
 
     try:
-        # 1. Crear lienzo negro
         canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
 
-        # 2. Imagen Central (75%)
+        # 1. Imagen Central
         if img_b64:
             if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
             img_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
             main_img = ImageOps.fit(img_raw, (CANVAS_SIZE, IMG_H), method=Image.Resampling.LANCZOS)
             canvas.paste(main_img, (0, FRAME_H))
 
-        # 3. Logo/Top Frame
+        # 2. Logo Top
         if os.path.exists(TEMPLATE_PATH):
             temp = Image.open(TEMPLATE_PATH).convert("RGBA")
             temp = temp.resize((CANVAS_SIZE, CANVAS_SIZE))
             logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_H))
             canvas.paste(logo_zone, (0, 0), logo_zone)
 
-        # 4. Texto Ultra-Minimalista (Bottom Frame)
-        if os.path.exists(FONT_PATH):
-            # TAMAÑOS SOLICITADOS: 12px y 10px
-            f_title = ImageFont.truetype(FONT_PATH, 12) 
-            f_bullet = ImageFont.truetype(FONT_PATH, 10)
-        else:
-            return jsonify({"error": "Falta Montserrat-Bold.ttf"}), 500
+        # 3. Textos con Mix de Fuentes
+        # Título en BOLD (13px) y Bullets en LIGHT (11px)
+        f_title = ImageFont.truetype(FONT_BOLD, 13) if os.path.exists(FONT_BOLD) else ImageFont.load_default()
+        f_bullet = ImageFont.truetype(FONT_LIGHT, 11) if os.path.exists(FONT_LIGHT) else ImageFont.load_default()
 
         draw = ImageDraw.Draw(canvas)
+        y_cursor = 945 + 40 
+        x_margin = 100
         
-        # Posicionamiento en el marco inferior (comienza en 945px)
-        # Centramos el bloque de texto verticalmente en los 135px disponibles
-        y_cursor = 945 + 45 
-        x_margin = 120 # Un poco más de margen lateral para que se vea más centrado
-        
-        # Dibujar Título (12px)
+        # Dibujar Título
         draw.text((x_margin, y_cursor), title[:80], font=f_title, fill=(255, 255, 255))
         
-        # Dibujar Bullets (10px)
-        y_cursor += 25
+        # Dibujar Bullets
+        y_cursor += 22
         for b in bullets:
-            if b and "spacer" not in str(b).lower():
-                clean_b = str(b).replace("•", "").strip()[:100]
-                draw.text((x_margin, y_cursor), f"• {clean_b}", font=f_bullet, fill=(150, 150, 150))
-                y_cursor += 18 # Espaciado muy fino
+            # Filtro estricto para no mostrar "spacers" o vacíos
+            clean_b = str(b).strip()
+            if clean_b and "spacer" not in clean_b.lower() and len(clean_b) > 2:
+                txt = clean_b.replace("•", "").strip()[:90]
+                draw.text((x_margin, y_cursor), f"•  {txt}", font=f_bullet, fill=(180, 180, 180))
+                y_cursor += 18
 
-        # 5. Guardado
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
         canvas.save(save_path, "JPEG", quality=100, subsampling=0)
