@@ -10,10 +10,8 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
-
-# DEFINICIÓN DE FUENTES
+# USAMOS SOLO LA FUENTE BOLD PARA TODO
 FONT_BOLD_PATH = os.path.join(BASE_DIR, 'Montserrat-Bold.ttf') 
-FONT_LIGHT_PATH = os.path.join(BASE_DIR, 'Quicksand-VariableFont_wght.ttf')
 
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
@@ -27,52 +25,56 @@ def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    # Limpieza de palabras de sistema
+    # Limpieza de palabras de sistema para un título limpio
     title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").strip()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64", "")
 
     try:
+        # 1. Fondo Negro Puro
         canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
 
-        # 1. Imagen Central (75%)
+        # 2. Imagen Central (75%)
         if img_b64:
             if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
             img_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
             main_img = ImageOps.fit(img_raw, (CANVAS_SIZE, IMG_H), method=Image.Resampling.LANCZOS)
             canvas.paste(main_img, (0, FRAME_H))
 
-        # 2. Logo Top (12.5%)
+        # 3. Logo Top (12.5%)
         if os.path.exists(TEMPLATE_PATH):
             temp = Image.open(TEMPLATE_PATH).convert("RGBA")
             temp = temp.resize((CANVAS_SIZE, CANVAS_SIZE))
             logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_H))
             canvas.paste(logo_zone, (0, 0), logo_zone)
 
-        # 3. Textos con Ajuste de Peso Visual
-        # Título en Montserrat (16px) y Bullets en Quicksand (13px)
-        f_title = ImageFont.truetype(FONT_BOLD_PATH, 16) if os.path.exists(FONT_BOLD_PATH) else ImageFont.load_default()
-        f_bullet = ImageFont.truetype(FONT_LIGHT_PATH, 13) if os.path.exists(FONT_LIGHT_PATH) else ImageFont.load_default()
+        # 4. Textos en Montserrat-Bold (13px y 11px)
+        if os.path.exists(FONT_BOLD_PATH):
+            f_title = ImageFont.truetype(FONT_BOLD_PATH, 13) 
+            f_bullet = ImageFont.truetype(FONT_BOLD_PATH, 11)
+        else:
+            return jsonify({"error": "Falta Montserrat-Bold.ttf"}), 500
 
         draw = ImageDraw.Draw(canvas)
         
-        # Posicionamiento centrado en el bloque inferior (945px a 1080px)
-        y_cursor = 945 + 38 
+        # Posicionamiento en el marco inferior (945px a 1080px)
+        y_cursor = 945 + 40 
         x_margin = 100
         
-        # Dibujar Título
-        draw.text((x_margin, y_cursor), title[:75], font=f_title, fill=(255, 255, 255))
+        # Dibujar Título (13px Bold)
+        draw.text((x_margin, y_cursor), title[:85], font=f_title, fill=(255, 255, 255))
         
-        # Dibujar Bullets con Quicksand
-        y_cursor += 28
+        # Dibujar Bullets (11px Bold)
+        y_cursor += 24
         for b in bullets:
             clean_b = str(b).strip()
-            if clean_b and "spacer" not in clean_b.lower():
-                txt = clean_b.replace("•", "").strip()[:85]
-                # Usamos un blanco roto para que el Quicksand no se vea "dentado"
-                draw.text((x_margin, y_cursor), f"•  {txt}", font=f_bullet, fill=(230, 230, 230))
-                y_cursor += 20
+            if clean_b and "spacer" not in clean_b.lower() and len(clean_b) > 2:
+                txt = clean_b.replace("•", "").strip()[:95]
+                # Blanco con un toque de gris para no saturar
+                draw.text((x_margin, y_cursor), f"•  {txt}", font=f_bullet, fill=(220, 220, 220))
+                y_cursor += 18
 
+        # 5. Guardado con máxima nitidez
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
         canvas.save(save_path, "JPEG", quality=100, subsampling=0)
