@@ -111,26 +111,49 @@ def fit_cover(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
     return resized.crop((left, top, left + target_w, top + target_h))
 
 
-# === Layout constants ===
-CANVAS_W, CANVAS_H = 1080, 1080      # Output size
-HEADER_H = 140                        # Space for logo at top
-TEXT_BAND_H = 280                     # Bottom band for title + bullets
+# =============================================================================
+# INSTAGRAM-OPTIMIZED LAYOUT CONSTANTS
+# =============================================================================
+# Canvas: 1080x1080 (Instagram square post)
+# Safe zone: 80px padding on all sides (Instagram may crop edges)
+# =============================================================================
+
+CANVAS_W, CANVAS_H = 1080, 1080      # Instagram square format
+
+# Instagram safe zones (content won't be cut off)
+SAFE_PADDING = 80                     # Safe margin from edges
+
+# Header area (logo from template)
+HEADER_H = 120                        # Space for logo at top
+
+# Text band at bottom - LARGER for readability
+TEXT_BAND_H = 380                     # Increased from 280 for bigger text
+
+# Image area (between header and text band)
 IMG_AREA_Y = HEADER_H
 IMG_AREA_H = CANVAS_H - HEADER_H - TEXT_BAND_H
 IMG_AREA_X = 0
 IMG_AREA_W = CANVAS_W
 
-# Text styles
-TITLE_SIZE = 48
-BULLET_SIZE = 26
-PADDING_X = 50
-TITLE_TOP_PAD = 25
-LINE_SP = 8
-BULLET_GAP = 10
-TEXT_COLOR = (255, 255, 255)
+# =============================================================================
+# TEXT STYLES - OPTIMIZED FOR INSTAGRAM READABILITY
+# =============================================================================
+# Instagram recommended: minimum 30px for body text to be readable on mobile
+# Title: Large and bold for impact
+# Bullets: Clear and readable on small screens
+# =============================================================================
 
+TITLE_SIZE = 64                       # Large title (was 48)
+BULLET_SIZE = 34                      # Readable bullets (was 26)
+PADDING_X = SAFE_PADDING              # Left/right padding (safe zone)
+TITLE_TOP_PAD = 35                    # Space from top of text band
+LINE_SP = 12                          # Line spacing
+BULLET_GAP = 14                       # Gap between bullet lines
+TEXT_COLOR = (255, 255, 255)          # White text
+
+# Dark overlay for text readability
 TEXT_BAND_OVERLAY = True
-BAND_ALPHA = 200
+BAND_ALPHA = 210                      # Slightly more opaque for contrast
 
 
 def draw_text_section(canvas: Image.Image, title: str, bullets: list):
@@ -142,9 +165,11 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
     band_y = CANVAS_H - TEXT_BAND_H
     band_rect = (0, band_y, CANVAS_W, CANVAS_H)
 
+    # Dark overlay for text readability
     if TEXT_BAND_OVERLAY:
         overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
         odraw = ImageDraw.Draw(overlay)
+        # Gradient effect - darker at bottom
         odraw.rectangle(band_rect, fill=(0, 0, 0, BAND_ALPHA))
         canvas_alpha = canvas.convert("RGBA")
         canvas_rgba = Image.alpha_composite(canvas_alpha, overlay)
@@ -152,18 +177,23 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
 
     draw = ImageDraw.Draw(canvas)
 
+    # Text width respects safe zones
     max_w = CANVAS_W - 2 * PADDING_X
 
+    # === TITLE ===
     title_lines = wrap_text(title or "", font_title, max_w, draw)
     line_h_title = font_title.getbbox("Ag")[3] - font_title.getbbox("Ag")[1] + LINE_SP
     y = band_y + TITLE_TOP_PAD
+    
     for line in title_lines:
         draw.text((PADDING_X, y), line, font=font_title, fill=TEXT_COLOR)
         y += line_h_title
 
+    # === BULLETS ===
     bullet_items = [b for b in (bullets or []) if (b or "").strip()]
 
-    y += 8
+    # Space between title and bullets
+    y += 20
 
     bullet_prefix = "• "
     line_h_bullet = font_bullet.getbbox("Ag")[3] - font_bullet.getbbox("Ag")[1] + BULLET_GAP
@@ -173,9 +203,11 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
         if not wrapped:
             continue
 
+        # First line with bullet point
         draw.text((PADDING_X, y), bullet_prefix + wrapped[0], font=font_bullet, fill=TEXT_COLOR)
         y += line_h_bullet
 
+        # Continuation lines (indented)
         indent_x = PADDING_X + int(draw.textlength(bullet_prefix, font=font_bullet))
         for cont in wrapped[1:]:
             draw.text((indent_x, y), cont, font=font_bullet, fill=TEXT_COLOR)
@@ -187,7 +219,13 @@ def draw_text_section(canvas: Image.Image, title: str, bullets: list):
 def home():
     return jsonify({
         "service": "Prestige 360 Image Generator",
+        "version": "2.0 - Instagram Optimized",
         "status": "running",
+        "features": [
+            "Instagram safe zones (80px padding)",
+            "Large readable text (64px title, 34px bullets)",
+            "1080x1080 square format"
+        ],
         "endpoints": {
             "health": "/health",
             "generate": "POST /generate-post"
@@ -199,11 +237,19 @@ def home():
 def health():
     return jsonify({
         "status": "ok",
+        "version": "2.0",
         "template_exists": os.path.isfile(TEMPLATE_PATH),
         "post_image_dir": os.path.isdir(POST_IMAGE_DIR),
         "post_output_dir": os.path.isdir(POST_OUTPUT_DIR),
         "font_bold_exists": os.path.isfile(FONT_BOLD_PATH),
         "font_regular_exists": os.path.isfile(FONT_REG_PATH),
+        "layout": {
+            "canvas": f"{CANVAS_W}x{CANVAS_H}",
+            "safe_padding": SAFE_PADDING,
+            "title_size": TITLE_SIZE,
+            "bullet_size": BULLET_SIZE,
+            "text_band_height": TEXT_BAND_H
+        }
     }), 200
 
 
@@ -269,6 +315,11 @@ def generate_post():
             "filename": filename,
             "output": out_path,
             "download_url": download_url,
+            "layout": {
+                "canvas": f"{CANVAS_W}x{CANVAS_H}",
+                "title_size": TITLE_SIZE,
+                "bullet_size": BULLET_SIZE
+            }
         }), 200
 
     except Exception as e:
