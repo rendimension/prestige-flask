@@ -12,22 +12,27 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
+# Intentamos cargar la fuente desde tu carpeta local en GitHub
+FONT_PATH = os.path.join(BASE_DIR, 'fonts', 'Montserrat-Bold.ttf')
+
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
-def get_system_font(size):
-    """Busca fuentes reales en el servidor Railway para poder escalarlas."""
-    paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        os.path.join(BASE_DIR, 'fonts', 'Montserrat-Bold.ttf')
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            return ImageFont.truetype(p, size)
+def get_font(size):
+    """Carga la fuente Montserrat o una del sistema que permita escalar tamaño."""
+    try:
+        if os.path.exists(FONT_PATH):
+            return ImageFont.truetype(FONT_PATH, size)
+        # Rutas comunes en servidores Linux (Railway)
+        for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 
+                  "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"]:
+            if os.path.exists(p):
+                return ImageFont.truetype(p, size)
+    except:
+        pass
     return ImageFont.load_default()
 
-def fit_cover(img, target_size=(1080, 1080)):
-    """Hace que la imagen llene todo el cuadro sin deformarse."""
+def resize_to_fill(img, target_size=(1080, 1080)):
+    """Ajusta la imagen para que llene todo el 1080x1080 sin dejar bandas negras."""
     iw, ih = img.size
     tw, th = target_size
     scale = max(tw / iw, th / ih)
@@ -40,63 +45,57 @@ def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    title = data.get("title", "PROYECTO COMERCIAL").upper()
+    title = data.get("title", "DISEÑO COMERCIAL").upper()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64")
 
     try:
-        # 1. CREAR FONDO TOTAL (1080x1080)
+        # 1. Crear el Fondo con la imagen de la IA (1080x1080)
         if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
         img_data = base64.b64decode(img_b64)
-        background = Image.open(BytesIO(img_data)).convert("RGB")
-        background = fit_cover(background) # Ahora la imagen es el 100% del post
+        bg_image = Image.open(BytesIO(img_data)).convert("RGB")
+        canvas = resize_to_fill(bg_image)
 
-        # 2. CAPA DE DISEÑO (Bandas translúcidas)
-        # Creamos una imagen transparente para dibujar las bandas
+        # 2. Crear Capa Creativa de Bandas (RGBA para transparencia)
         overlay = Image.new("RGBA", (1080, 1080), (0, 0, 0, 0))
         draw_ov = ImageDraw.Draw(overlay)
         
-        # Banda superior (Logo) - Negro con 50% de opacidad
+        # Banda superior (Logo) - Opacidad 50%
         draw_ov.rectangle([0, 0, 1080, 180], fill=(0, 0, 0, 130))
-        # Banda inferior (Texto) - Negro con 75% de opacidad
-        draw_ov.rectangle([0, 720, 1080, 1080], fill=(0, 0, 0, 190))
+        # Banda inferior (Texto) - Opacidad 75%
+        draw_ov.rectangle([0, 700, 1080, 1080], fill=(0, 0, 0, 190))
         
-        # Fusionar bandas con el fondo
-        background.paste(overlay, (0, 0), overlay)
+        # Unir bandas con la imagen
+        canvas.paste(overlay, (0, 0), overlay)
 
-        # 3. PEGAR EL LOGO (Template)
+        # 3. Pegar el Template (Logo Prestige 360)
         if os.path.exists(TEMPLATE_PATH):
-            logo_layer = Image.open(TEMPLATE_PATH).convert("RGBA")
-            logo_layer = logo_layer.resize((1080, 1080))
-            background.paste(logo_layer, (0, 0), logo_layer)
+            template = Image.open(TEMPLATE_PATH).convert("RGBA")
+            template = template.resize((1080, 1080))
+            canvas.paste(template, (0, 0), template)
 
-        # 4. TEXTOS GIGANTES
-        draw = ImageDraw.Draw(background)
-        f_title = get_system_font(70)  # Título bien grande
-        f_bullet = get_system_font(38) # Bullets legibles
+        # 4. Dibujar Textos (GIGANTES para legibilidad)
+        draw = ImageDraw.Draw(canvas)
+        f_title = get_font(75) 
+        f_bullet = get_font(42)
 
-        # Dibujar Título (Sombra ligera para legibilidad extra)
-        draw.text((72, 752), title, font=f_title, fill=(0,0,0)) # Sombra
-        draw.text((70, 750), title, font=f_title, fill=(255, 255, 255))
+        # Título
+        draw.text((80, 740), title[:45], font=f_title, fill=(255, 255, 255))
         
-        # Dibujar Bullets
-        y = 850
+        # Bullets (Cambiamos el símbolo para evitar errores de renderizado)
+        y = 840
         for b in bullets:
-            if b and "spacer" not in b.lower():
-                txt = f"• {str(b).strip()}"
-                draw.text((70, y), txt, font=f_bullet, fill=(255, 255, 255))
-                y += 60
+            if b and "spacer" not in str(b).lower():
+                clean_text = str(b).strip()
+                draw.text((80, y), f"- {clean_text[:55]}", font=f_bullet, fill=(255, 255, 255))
+                y += 65
 
-        # 5. GUARDAR RESULTADO
+        # 5. Guardar
         fname = f"post_{uuid.uuid4().hex}.jpg"
         out_path = os.path.join(POST_OUTPUT_DIR, fname)
-        background.save(out_path, "JPEG", quality=95)
+        canvas.save(out_path, "JPEG", quality=95)
         
-        return jsonify({
-            "status": "success", 
-            "download_url": f"{request.url_root.rstrip('/')}/post_output/{fname}",
-            "layout": "creative_full_image"
-        })
+        return jsonify({"status": "success", "download_url": f"{request.url_root.rstrip('/')}/post_output/{fname}"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
