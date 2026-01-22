@@ -7,79 +7,81 @@ from io import BytesIO
 
 app = Flask(__name__)
 
-# Configuración de Rutas
+# Configuración de carpetas y archivos
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
-# NOMBRE EXACTO DE TU FUENTE SUBIDA
-FONT_PATH = os.path.join(BASE_DIR, 'Montserrat-VariableFont_wght.ttf') 
+# USANDO TU NUEVA FUENTE QUICKSAND
+FONT_PATH = os.path.join(BASE_DIR, 'Quicksand-VariableFont_wght.ttf') 
 
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
-def fit_image_to_canvas(img, size=(1080, 1080)):
-    """Ajusta la imagen para que llene todo el cuadro sin dejar espacios negros."""
+def fit_image(img, size=(1080, 1080)):
+    """Ajusta la imagen de la IA para que llene todo el post 1080x1080."""
     img = img.convert("RGB")
     iw, ih = img.size
-    target_w, target_h = size
-    scale = max(target_w / iw, target_h / ih)
+    scale = max(size[0] / iw, size[1] / ih)
     nw, nh = int(iw * scale), int(ih * scale)
     img = img.resize((nw, nh), Image.Resampling.LANCZOS)
-    return img.crop(((nw - target_w) // 2, (nh - target_h) // 2, (nw + target_w) // 2, (nh + target_h) // 2))
+    return img.crop(((nw - size[0])//2, (nh - size[1])//2, (nw + size[0])//2, (nh + size[1])//2))
 
 @app.route("/generate-post", methods=["POST"])
 def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    title = data.get("title", "PROYECTO PRESTIGE").upper()
+    title = data.get("title", "").upper()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64", "")
 
     try:
-        # 1. Fondo: Imagen de la IA (1080x1080)
+        # 1. Crear Fondo (Imagen de la IA)
         if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
-        img_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
-        canvas = fit_image_to_canvas(img_raw)
+        bg = Image.open(BytesIO(base64.b64decode(img_b64)))
+        canvas = fit_image(bg)
 
-        # 2. Capa Creativa: Bandas negras translúcidas
+        # 2. Capa de diseño: Bandas translúcidas (Creativas)
         overlay = Image.new("RGBA", (1080, 1080), (0, 0, 0, 0))
         draw_ov = ImageDraw.Draw(overlay)
-        # Banda superior (Logo) - Opacidad 55%
-        draw_ov.rectangle([0, 0, 1080, 180], fill=(0, 0, 0, 140))
-        # Banda inferior (Texto) - Opacidad 80%
-        draw_ov.rectangle([0, 700, 1080, 1080], fill=(0, 0, 0, 204))
+        # Banda Logo (Superior) - Opacidad suave
+        draw_ov.rectangle([0, 0, 1080, 180], fill=(0, 0, 0, 140)) 
+        # Banda Texto (Inferior) - Opacidad más fuerte para lectura
+        draw_ov.rectangle([0, 710, 1080, 1080], fill=(0, 0, 0, 215)) 
         canvas.paste(overlay, (0, 0), overlay)
 
-        # 3. Logo (Template) - Pegamos solo la parte superior para no tapar el fondo
+        # 3. Poner el Logo (Parte superior del Template)
         if os.path.exists(TEMPLATE_PATH):
-            temp_img = Image.open(TEMPLATE_PATH).convert("RGBA")
-            temp_img = temp_img.resize((1080, 1080))
-            # Recortamos la zona del logo
-            logo_zone = temp_img.crop((0, 0, 1080, 180))
-            canvas.paste(logo_zone, (0, 0), logo_zone)
+            logo_img = Image.open(TEMPLATE_PATH).convert("RGBA")
+            logo_img = logo_img.resize((1080, 1080))
+            logo_crop = logo_img.crop((0, 0, 1080, 180))
+            canvas.paste(logo_crop, (0, 0), logo_crop)
 
-        # 4. Textos con la FUENTE MONTSERRAT que subiste
+        # 4. Textos con QUICKSAND (Ajuste de nitidez)
         if os.path.exists(FONT_PATH):
-            f_title = ImageFont.truetype(FONT_PATH, 75)
-            f_bullet = ImageFont.truetype(FONT_PATH, 42)
+            # Quicksand es un poco más delgada, subimos un punto el tamaño
+            f_title = ImageFont.truetype(FONT_PATH, 68) 
+            f_bullet = ImageFont.truetype(FONT_PATH, 38)
         else:
-            return jsonify({"error": f"No se encontro la fuente en {FONT_PATH}"}), 500
+            return jsonify({"error": f"Archivo {os.path.basename(FONT_PATH)} no encontrado en el repo"}), 500
 
         draw = ImageDraw.Draw(canvas)
-        # Dibujar Título
-        draw.text((80, 730), title[:40], font=f_title, fill=(255, 255, 255))
         
-        # Dibujar Bullets
-        y_pos = 835
+        # Título
+        draw.text((80, 740), title[:45], font=f_title, fill=(255, 255, 255))
+        
+        # Bullets
+        y = 835
         for b in bullets:
             if b and "spacer" not in str(b).lower():
-                draw.text((80, y_pos), f"• {str(b).strip()[:55]}", font=f_bullet, fill=(245, 245, 245))
-                y_pos += 65
+                txt = str(b).strip()[:55]
+                draw.text((80, y), f"•  {txt}", font=f_bullet, fill=(245, 245, 245))
+                y += 65
 
-        # 5. Guardar y Enviar
+        # 5. Guardar con calidad máxima para evitar lo "difuso"
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
-        canvas.save(save_path, "JPEG", quality=95)
+        # Usamos calidad 100 y desactivamos el subsampling para bordes perfectos
+        canvas.save(save_path, "JPEG", quality=100, subsampling=0) 
         
         return jsonify({"status": "success", "download_url": f"{request.url_root.rstrip('/')}/post_output/{filename}"})
 
