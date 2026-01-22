@@ -11,71 +11,72 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
-# RUTA A LA NUEVA FUENTE ESTÁTICA
 FONT_PATH = os.path.join(BASE_DIR, 'Montserrat-Bold.ttf') 
 
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
-def fit_image(img, size=(1080, 1080)):
-    """Ajusta la imagen de la IA para que llene todo el post perfectamente."""
+# Medidas exactas basadas en tus porcentajes (12.5% de 1080 = 135px)
+CANVAS_SIZE = 1080
+FRAME_H = 135  # 12.5% para el top y para el bottom
+
+def fit_image(img, target_w, target_h):
+    """Ajusta la imagen para que llene el 75% central (810px de alto)."""
     img = img.convert("RGB")
-    # ImageOps.fit recorta y centra automáticamente para llenar el espacio
-    return ImageOps.fit(img, size, method=Image.Resampling.LANCZOS)
+    return ImageOps.fit(img, (target_w, target_h), method=Image.Resampling.LANCZOS)
 
 @app.route("/generate-post", methods=["POST"])
 def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    title = data.get("title", "").upper()
+    # Limpiamos el texto de palabras extrañas si n8n las envía
+    title = data.get("title", "").upper().replace("SPACER", "").strip()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64", "")
 
     try:
-        # 1. Fondo: Imagen de la IA (1080x1080)
+        # 1. Crear lienzo base (Negro puro para los frames)
+        canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
+
+        # 2. Insertar Imagen en el centro (75% = 810px de alto)
         if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
         bg_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
-        canvas = fit_image(bg_raw)
+        main_img = fit_image(bg_raw, CANVAS_SIZE, 810)
+        canvas.paste(main_img, (0, FRAME_H)) # Empezamos después del frame superior
 
-        # 2. Diseño Creativo: Bandas translúcidas
-        overlay = Image.new("RGBA", (1080, 1080), (0, 0, 0, 0))
-        draw_ov = ImageDraw.Draw(overlay)
-        # Banda superior para el Logo (Opacidad 50%)
-        draw_ov.rectangle([0, 0, 1080, 180], fill=(0, 0, 0, 130))
-        # Banda inferior para el Texto (Opacidad 85% para legibilidad máxima)
-        draw_ov.rectangle([0, 720, 1080, 1080], fill=(0, 0, 0, 215))
-        canvas.paste(overlay, (0, 0), overlay)
-
-        # 3. Logo (Template) - Pegamos solo la cabecera para no tapar el centro
+        # 3. Logo (Top Frame - 12.5%)
         if os.path.exists(TEMPLATE_PATH):
             temp_img = Image.open(TEMPLATE_PATH).convert("RGBA")
-            temp_img = temp_img.resize((1080, 1080))
-            logo_zone = temp_img.crop((0, 0, 1080, 180))
+            temp_img = temp_img.resize((CANVAS_SIZE, CANVAS_SIZE))
+            logo_zone = temp_img.crop((0, 0, CANVAS_SIZE, FRAME_H))
             canvas.paste(logo_zone, (0, 0), logo_zone)
 
-        # 4. Textos con MONTSERRAT BOLD (Nitidez extrema)
+        # 4. Textos (Bottom Frame - 12.5%)
+        # Reducimos tamaño para que quepa perfecto en los 135px de abajo
         if os.path.exists(FONT_PATH):
-            f_title = ImageFont.truetype(FONT_PATH, 70) 
-            f_bullet = ImageFont.truetype(FONT_PATH, 38)
+            f_title = ImageFont.truetype(FONT_PATH, 42) # Tamaño más elegante
+            f_bullet = ImageFont.truetype(FONT_PATH, 24)
         else:
-            return jsonify({"error": "No se encontro Montserrat-Bold.ttf en el repo"}), 500
+            return jsonify({"error": "Falta Montserrat-Bold.ttf"}), 500
 
         draw = ImageDraw.Draw(canvas)
-        # Dibujar Título
-        draw.text((75, 755), title[:42], font=f_title, fill=(255, 255, 255))
         
-        # Dibujar Bullets
-        y = 855
-        for b in bullets:
-            if b and "spacer" not in str(b).lower():
-                txt = f"•  {str(b).strip()[:55]}"
-                draw.text((75, y), txt, font=f_bullet, fill=(240, 240, 240))
-                y += 60
+        # Posicionamos el título dentro del frame inferior (que empieza en 945px)
+        y_text_start = CANVAS_SIZE - FRAME_H + 25
+        draw.text((60, y_text_start), title[:50], font=f_title, fill=(255, 255, 255))
+        
+        # Bullets en una sola línea o muy compactos
+        y_bullet = y_text_start + 55
+        bullet_list = [str(b).replace("spacer", "").strip() for b in bullets if b and "spacer" not in str(b).lower()]
+        
+        # Dibujamos solo los primeros 2 bullets para no saturar el 12.5%
+        for b in bullet_list[:2]:
+            draw.text((60, y_bullet), f"• {b[:70]}", font=f_bullet, fill=(200, 200, 200))
+            y_bullet += 35
 
-        # 5. Guardar con calidad de impresión
+        # 5. Guardar con máxima nitidez
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
-        # Calidad 100 y subsampling 0 eliminan cualquier ruido en las letras
         canvas.save(save_path, "JPEG", quality=100, subsampling=0)
         
         return jsonify({"status": "success", "download_url": f"{request.url_root.rstrip('/')}/post_output/{filename}"})
