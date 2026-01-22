@@ -16,25 +16,21 @@ os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
 # === GEOMETRÍA ESTRICTA 12.5% - 75% - 12.5% ===
 CANVAS_SIZE = 1080
-FRAME_H = 135  # 12.5% exacto
-IMG_H = 810    # 75% exacto
+FRAME_H = 135  
+IMG_H = 810    
 
 @app.route("/generate-post", methods=["POST"])
 def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    # Limpieza profunda de texto para evitar palabras innecesarias
-    raw_title = data.get("title", "").upper()
-    for word in ["STRATEGIC", "PLANNING", "SUCCESS", "APPROACH"]:
-        raw_title = raw_title.replace(word, "")
-    title = raw_title.strip()
-    
+    # Limpieza de texto
+    title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").strip()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64", "")
 
     try:
-        # 1. Crear lienzo negro de fondo
+        # 1. Crear lienzo negro
         canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
 
         # 2. Imagen Central (75%)
@@ -44,40 +40,40 @@ def generate_post():
             main_img = ImageOps.fit(img_raw, (CANVAS_SIZE, IMG_H), method=Image.Resampling.LANCZOS)
             canvas.paste(main_img, (0, FRAME_H))
 
-        # 3. Logo/Top Frame (Pegamos solo la franja superior del template)
+        # 3. Logo/Top Frame
         if os.path.exists(TEMPLATE_PATH):
             temp = Image.open(TEMPLATE_PATH).convert("RGBA")
             temp = temp.resize((CANVAS_SIZE, CANVAS_SIZE))
             logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_H))
             canvas.paste(logo_zone, (0, 0), logo_zone)
 
-        # 4. Texto Estilo "Minimal" (Bottom Frame)
+        # 4. Texto Ultra-Minimalista (Bottom Frame)
         if os.path.exists(FONT_PATH):
-            # TAMAÑOS REDUCIDOS A LA MITAD PARA ELEGANCIA
-            f_title = ImageFont.truetype(FONT_PATH, 24) 
-            f_bullet = ImageFont.truetype(FONT_PATH, 16)
+            # TAMAÑOS SOLICITADOS: 12px y 10px
+            f_title = ImageFont.truetype(FONT_PATH, 12) 
+            f_bullet = ImageFont.truetype(FONT_PATH, 10)
         else:
             return jsonify({"error": "Falta Montserrat-Bold.ttf"}), 500
 
         draw = ImageDraw.Draw(canvas)
         
-        # El área de texto empieza en 945px
-        # Dejamos un margen superior interno en la banda negra
-        y_cursor = 945 + 35 
-        x_margin = 100 # Margen lateral más amplio para elegancia
+        # Posicionamiento en el marco inferior (comienza en 945px)
+        # Centramos el bloque de texto verticalmente en los 135px disponibles
+        y_cursor = 945 + 45 
+        x_margin = 120 # Un poco más de margen lateral para que se vea más centrado
         
-        # Dibujar Título
-        draw.text((x_margin, y_cursor), title[:60], font=f_title, fill=(255, 255, 255))
+        # Dibujar Título (12px)
+        draw.text((x_margin, y_cursor), title[:80], font=f_title, fill=(255, 255, 255))
         
-        # Dibujar Bullets (máximo 2 para mantener el orden)
-        y_cursor += 40
-        for b in bullets[:2]:
+        # Dibujar Bullets (10px)
+        y_cursor += 25
+        for b in bullets:
             if b and "spacer" not in str(b).lower():
-                clean_b = str(b).replace("•", "").strip()[:80]
-                draw.text((x_margin, y_cursor), f"•  {clean_b}", font=f_bullet, fill=(160, 160, 160))
-                y_cursor += 25
+                clean_b = str(b).replace("•", "").strip()[:100]
+                draw.text((x_margin, y_cursor), f"• {clean_b}", font=f_bullet, fill=(150, 150, 150))
+                y_cursor += 18 # Espaciado muy fino
 
-        # 5. Guardado de alta calidad
+        # 5. Guardado
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
         canvas.save(save_path, "JPEG", quality=100, subsampling=0)
