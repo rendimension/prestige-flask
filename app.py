@@ -10,12 +10,14 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
-# FUENTES
-FONT_BOLD = os.path.join(BASE_DIR, 'Montserrat-Bold.ttf') 
-FONT_LIGHT = os.path.join(BASE_DIR, 'Quicksand-VariableFont_wght.ttf')
+
+# DEFINICIÓN DE FUENTES
+FONT_BOLD_PATH = os.path.join(BASE_DIR, 'Montserrat-Bold.ttf') 
+FONT_LIGHT_PATH = os.path.join(BASE_DIR, 'Quicksand-VariableFont_wght.ttf')
 
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
+# GEOMETRÍA (12.5% - 75% - 12.5%)
 CANVAS_SIZE = 1080
 FRAME_H = 135  
 IMG_H = 810    
@@ -25,49 +27,51 @@ def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    # Limpieza de textos
-    title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").replace("PLANNING", "").strip()
+    # Limpieza de palabras de sistema
+    title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").strip()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64", "")
 
     try:
         canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
 
-        # 1. Imagen Central
+        # 1. Imagen Central (75%)
         if img_b64:
             if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
             img_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
             main_img = ImageOps.fit(img_raw, (CANVAS_SIZE, IMG_H), method=Image.Resampling.LANCZOS)
             canvas.paste(main_img, (0, FRAME_H))
 
-        # 2. Logo Top
+        # 2. Logo Top (12.5%)
         if os.path.exists(TEMPLATE_PATH):
             temp = Image.open(TEMPLATE_PATH).convert("RGBA")
             temp = temp.resize((CANVAS_SIZE, CANVAS_SIZE))
             logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_H))
             canvas.paste(logo_zone, (0, 0), logo_zone)
 
-        # 3. Textos con Mix de Fuentes
-        # Título en BOLD (13px) y Bullets en LIGHT (11px)
-        f_title = ImageFont.truetype(FONT_BOLD, 13) if os.path.exists(FONT_BOLD) else ImageFont.load_default()
-        f_bullet = ImageFont.truetype(FONT_LIGHT, 11) if os.path.exists(FONT_LIGHT) else ImageFont.load_default()
+        # 3. Textos con Ajuste de Peso Visual
+        # Título en Montserrat (16px) y Bullets en Quicksand (13px)
+        f_title = ImageFont.truetype(FONT_BOLD_PATH, 16) if os.path.exists(FONT_BOLD_PATH) else ImageFont.load_default()
+        f_bullet = ImageFont.truetype(FONT_LIGHT_PATH, 13) if os.path.exists(FONT_LIGHT_PATH) else ImageFont.load_default()
 
         draw = ImageDraw.Draw(canvas)
-        y_cursor = 945 + 40 
+        
+        # Posicionamiento centrado en el bloque inferior (945px a 1080px)
+        y_cursor = 945 + 38 
         x_margin = 100
         
         # Dibujar Título
-        draw.text((x_margin, y_cursor), title[:80], font=f_title, fill=(255, 255, 255))
+        draw.text((x_margin, y_cursor), title[:75], font=f_title, fill=(255, 255, 255))
         
-        # Dibujar Bullets
-        y_cursor += 22
+        # Dibujar Bullets con Quicksand
+        y_cursor += 28
         for b in bullets:
-            # Filtro estricto para no mostrar "spacers" o vacíos
             clean_b = str(b).strip()
-            if clean_b and "spacer" not in clean_b.lower() and len(clean_b) > 2:
-                txt = clean_b.replace("•", "").strip()[:90]
-                draw.text((x_margin, y_cursor), f"•  {txt}", font=f_bullet, fill=(180, 180, 180))
-                y_cursor += 18
+            if clean_b and "spacer" not in clean_b.lower():
+                txt = clean_b.replace("•", "").strip()[:85]
+                # Usamos un blanco roto para que el Quicksand no se vea "dentado"
+                draw.text((x_margin, y_cursor), f"•  {txt}", font=f_bullet, fill=(230, 230, 230))
+                y_cursor += 20
 
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
