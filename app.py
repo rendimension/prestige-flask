@@ -7,7 +7,6 @@ from io import BytesIO
 
 app = Flask(__name__)
 
-# Configuración de Rutas
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
@@ -15,65 +14,70 @@ FONT_PATH = os.path.join(BASE_DIR, 'Montserrat-Bold.ttf')
 
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
-# === GEOMETRÍA DEL POST (1080x1080) ===
-# 12.5% de 1080 = 135px
-TOP_FRAME = 135
-BOTTOM_FRAME = 135
-IMAGE_HEIGHT = 810 # El 75% central
+# === GEOMETRÍA ESTRICTA 12.5% - 75% - 12.5% ===
+CANVAS_SIZE = 1080
+FRAME_H = 135  # 12.5% exacto
+IMG_H = 810    # 75% exacto
 
 @app.route("/generate-post", methods=["POST"])
 def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    # Limpieza de textos (evitar palabras de sistema)
-    title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").strip()
+    # Limpieza profunda de texto para evitar palabras innecesarias
+    raw_title = data.get("title", "").upper()
+    for word in ["STRATEGIC", "PLANNING", "SUCCESS", "APPROACH"]:
+        raw_title = raw_title.replace(word, "")
+    title = raw_title.strip()
+    
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64", "")
 
     try:
-        # 1. Crear lienzo NEGRO absoluto
-        canvas = Image.new("RGB", (1080, 1080), (0, 0, 0))
+        # 1. Crear lienzo negro de fondo
+        canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
 
-        # 2. Pegar IMAGEN en el centro (75%)
+        # 2. Imagen Central (75%)
         if img_b64:
             if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
             img_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
-            # Forzamos el tamaño al 75% del alto
-            main_img = ImageOps.fit(img_raw, (1080, IMAGE_HEIGHT), method=Image.Resampling.LANCZOS)
-            canvas.paste(main_img, (0, TOP_FRAME))
+            main_img = ImageOps.fit(img_raw, (CANVAS_SIZE, IMG_H), method=Image.Resampling.LANCZOS)
+            canvas.paste(main_img, (0, FRAME_H))
 
-        # 3. Pegar LOGO en el top (12.5%)
+        # 3. Logo/Top Frame (Pegamos solo la franja superior del template)
         if os.path.exists(TEMPLATE_PATH):
             temp = Image.open(TEMPLATE_PATH).convert("RGBA")
-            temp = temp.resize((1080, 1080))
-            logo_crop = temp.crop((0, 0, 1080, TOP_FRAME))
-            canvas.paste(logo_crop, (0, 0), logo_crop)
+            temp = temp.resize((CANVAS_SIZE, CANVAS_SIZE))
+            logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_H))
+            canvas.paste(logo_zone, (0, 0), logo_zone)
 
-        # 4. Escribir TEXTO en el bottom (12.5%)
+        # 4. Texto Estilo "Minimal" (Bottom Frame)
         if os.path.exists(FONT_PATH):
-            f_title = ImageFont.truetype(FONT_PATH, 35) # Tamaño elegante, no invasivo
-            f_bullet = ImageFont.truetype(FONT_PATH, 22) # Tamaño lectura
+            # TAMAÑOS REDUCIDOS A LA MITAD PARA ELEGANCIA
+            f_title = ImageFont.truetype(FONT_PATH, 24) 
+            f_bullet = ImageFont.truetype(FONT_PATH, 16)
         else:
-            return jsonify({"error": "No se detecta Montserrat-Bold.ttf"}), 500
+            return jsonify({"error": "Falta Montserrat-Bold.ttf"}), 500
 
         draw = ImageDraw.Draw(canvas)
         
-        # El área de texto empieza en 945px (1080 - 135)
-        text_y = 945 + 25 
+        # El área de texto empieza en 945px
+        # Dejamos un margen superior interno en la banda negra
+        y_cursor = 945 + 35 
+        x_margin = 100 # Margen lateral más amplio para elegancia
         
-        # Título
-        draw.text((70, text_y), title[:55], font=f_title, fill=(255, 255, 255))
+        # Dibujar Título
+        draw.text((x_margin, y_cursor), title[:60], font=f_title, fill=(255, 255, 255))
         
-        # Bullets (Máximo 2 para que no se vea amontonado)
-        y_bullet = text_y + 45
+        # Dibujar Bullets (máximo 2 para mantener el orden)
+        y_cursor += 40
         for b in bullets[:2]:
             if b and "spacer" not in str(b).lower():
-                clean_b = str(b).replace("•", "").strip()[:70]
-                draw.text((70, y_bullet), f"• {clean_b}", font=f_bullet, fill=(200, 200, 200))
-                y_bullet += 30
+                clean_b = str(b).replace("•", "").strip()[:80]
+                draw.text((x_margin, y_cursor), f"•  {clean_b}", font=f_bullet, fill=(160, 160, 160))
+                y_cursor += 25
 
-        # 5. Guardar
+        # 5. Guardado de alta calidad
         filename = f"post_{uuid.uuid4().hex}.jpg"
         save_path = os.path.join(POST_OUTPUT_DIR, filename)
         canvas.save(save_path, "JPEG", quality=100, subsampling=0)
