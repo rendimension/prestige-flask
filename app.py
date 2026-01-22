@@ -3,124 +3,97 @@ import os
 import requests
 from PIL import Image, ImageDraw, ImageFont
 import uuid
-import sys
 import base64
 from io import BytesIO
-from urllib.parse import urlparse
 
 app = Flask(__name__)
 
-# === Paths ===
+# === Configuración de Rutas ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-POST_IMAGE_DIR = os.path.join(BASE_DIR, 'post_image')
 POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
-FONT_BOLD_PATH = os.path.join(BASE_DIR, 'fonts', 'Montserrat-Bold.ttf')
-FONT_REG_PATH = os.path.join(BASE_DIR, 'fonts', 'Montserrat-Regular.ttf')
-
-os.makedirs(POST_IMAGE_DIR, exist_ok=True)
 os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
 
-def clear_folder(folder_path):
-    for name in os.listdir(folder_path):
-        try: os.remove(os.path.join(folder_path, name))
-        except: pass
+def get_huge_font(size):
+    """Intenta cargar fuentes estándar de Linux que Railway suele tener."""
+    font_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        os.path.join(BASE_DIR, 'fonts', 'Montserrat-Bold.ttf') # Tu fuente actual
+    ]
+    for path in font_paths:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default() # Si todo falla, vuelve a la pequeña (pero intentaremos que no pase)
 
-def download_image(url, folder):
-    resp = requests.get(url, timeout=30)
-    resp.raise_for_status()
-    filename = f"{uuid.uuid4().hex}.jpg"
-    path = os.path.join(folder, filename)
-    with open(path, 'wb') as f: f.write(resp.content)
-    return path
-
-def save_base64(b64, folder):
-    if ',' in b64: b64 = b64.split(',', 1)[1]
-    data = base64.b64decode(b64)
-    img = Image.open(BytesIO(data)).convert("RGB")
-    path = os.path.join(folder, f"{uuid.uuid4().hex}.jpg")
-    img.save(path, "JPEG")
-    return path
-
-def fit_cover(img, target_w, target_h):
+def fit_cover(img, target_size):
     iw, ih = img.size
-    scale = max(target_w / iw, target_h / ih)
+    tw, th = target_size
+    scale = max(tw / iw, th / ih)
     nw, nh = int(iw * scale), int(ih * scale)
     img = img.resize((nw, nh), Image.Resampling.LANCZOS)
-    return img.crop(((nw-target_w)//2, (nh-target_h)//2, (nw+target_w)//2, (nh+target_h)//2))
-
-# === CONFIGURACIÓN DE DISEÑO CORREGIDA ===
-CANVAS_W, CANVAS_H = 1080, 1080
-HEADER_H = 130      # Espacio para el logo
-TEXT_BAND_H = 340   # Altura de la banda negra (reducida)
-SAFE_PAD = 70       # Margen lateral
-
-# Tamaños de fuente MASIVOS para legibilidad
-TITLE_SIZE = 82     
-BULLET_SIZE = 44    
-
-def draw_text_section(canvas, title, bullets):
-    draw = ImageDraw.Draw(canvas)
-    # Cargar fuentes o usar default si fallan
-    try:
-        f_title = ImageFont.truetype(FONT_BOLD_PATH, TITLE_SIZE)
-        f_bullet = ImageFont.truetype(FONT_REG_PATH, BULLET_SIZE)
-    except:
-        f_title = f_bullet = ImageFont.load_default()
-
-    y_start = CANVAS_H - TEXT_BAND_H + 40
-    
-    # Dibujar Título
-    draw.text((SAFE_PAD, y_start), title.upper()[:45], font=f_title, fill=(255,255,255))
-    
-    # Dibujar Bullets (Corrigiendo el símbolo extraño)
-    y_current = y_start + 100
-    for b in bullets:
-        if b and str(b).strip():
-            clean_txt = str(b).replace('spacer','').strip()
-            draw.text((SAFE_PAD, y_current), f"- {clean_txt[:50]}", font=f_bullet, fill=(255,255,255))
-            y_current += 65
-
-@app.route('/post_output/<path:filename>')
-def send_output(filename):
-    return send_from_directory(POST_OUTPUT_DIR, filename)
+    return img.crop(((nw-tw)//2, (nh-th)//2, (nw+tw)//2, (nh+th)//2))
 
 @app.route("/generate-post", methods=["POST"])
 def generate_post():
     data = request.get_json()
     if isinstance(data, list): data = data[0]
     
-    title = data.get("title", "DISEÑO COMERCIAL")
+    title = data.get("title", "DISEÑO ESTRATÉGICO").upper()
     bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
     img_b64 = data.get("image_base64")
-    img_url = data.get("image_url")
 
-    clear_folder(POST_IMAGE_DIR)
-    
     try:
-        # 1. Obtener imagen de fondo
-        path = save_base64(img_b64, POST_IMAGE_DIR) if img_b64 else download_image(img_url, POST_IMAGE_DIR)
+        # 1. IMAGEN DE FONDO (1080x1080 completo)
+        if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
+        img_data = base64.b64decode(img_b64)
+        canvas = Image.open(BytesIO(img_data)).convert("RGB")
+        canvas = fit_cover(canvas, (1080, 1080))
         
-        # 2. Preparar el canvas (Template)
-        template = Image.open(TEMPLATE_PATH).convert("RGB").resize((CANVAS_W, CANVAS_H))
+        # 2. CAPA CREATIVA (Bandas con Opacidad)
+        overlay = Image.new("RGBA", (1080, 1080), (0, 0, 0, 0))
+        draw_ov = ImageDraw.Draw(overlay)
         
-        # 3. Pegar la foto del proyecto (ajustada al centro)
-        with Image.open(path) as photo:
-            photo_area = fit_cover(photo, CANVAS_W, CANVAS_H - HEADER_H - TEXT_BAND_H)
-            template.paste(photo_area, (0, HEADER_H))
+        # Banda Superior para Logo (Negro 50% opacidad)
+        draw_ov.rectangle([0, 0, 1080, 180], fill=(0, 0, 0, 128))
+        # Banda Inferior para Texto (Negro 75% opacidad)
+        draw_ov.rectangle([0, 700, 1080, 1080], fill=(0, 0, 0, 190))
+        
+        canvas.paste(overlay, (0, 0), overlay)
 
-        # 4. Dibujar la banda negra y el texto
-        overlay = Image.new("RGBA", (CANVAS_W, TEXT_BAND_H), (0, 0, 0, 230))
-        template.paste(overlay, (0, CANVAS_H - TEXT_BAND_H), overlay)
-        draw_text_section(template, title, bullets)
+        # 3. LOGO (Template transparente encima)
+        if os.path.exists(TEMPLATE_PATH):
+            logo = Image.open(TEMPLATE_PATH).convert("RGBA")
+            logo = logo.resize((1080, 1080))
+            canvas.paste(logo, (0, 0), logo)
+
+        # 4. TEXTO GIGANTE (Obedeciendo el setting)
+        draw = ImageDraw.Draw(canvas)
+        # Usamos fuentes que el sistema Linux sí reconoce
+        f_title = get_huge_font(85) 
+        f_bullet = get_huge_font(45)
+
+        # Título
+        draw.text((80, 735), title[:40], font=f_title, fill=(255, 255, 255))
+        
+        # Bullets
+        y = 840
+        for b in bullets:
+            if b and "spacer" not in b.lower():
+                draw.text((80, y), f"• {b[:55]}", font=f_bullet, fill=(255, 255, 255))
+                y += 65
 
         # 5. Guardar
         fname = f"post_{uuid.uuid4().hex}.jpg"
-        template.save(os.path.join(POST_OUTPUT_DIR, fname), "JPEG", quality=95)
+        canvas.save(os.path.join(POST_OUTPUT_DIR, fname), "JPEG", quality=95)
         
         return jsonify({"status": "success", "download_url": f"{request.url_root.rstrip('/')}/post_output/{fname}"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/post_output/<path:filename>')
+def send_output(filename):
+    return send_from_directory(POST_OUTPUT_DIR, filename)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
