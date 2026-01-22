@@ -1,0 +1,10 @@
+[phases.setup]
+nixPkgs = ["...", "fontconfig"]
+
+[phases.install]
+cmds = [
+    "pip install -r requirements.txt",
+    "mkdir -p fonts",
+    "curl -L -o fonts/Montserrat-Bold.ttf 'https://raw.githubusercontent.com/JulietaUla/Montserrat/master/fonts/ttf/Montserrat-Bold.ttf'",
+    "curl -L -o fonts/Montserrat-Regular.ttf 'https://raw.githubusercontent.com/JulietaUla/Montserrat/master/fonts/ttf/Montserrat-Regular.ttf'"
+]
