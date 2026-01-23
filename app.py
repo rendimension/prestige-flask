@@ -25,13 +25,11 @@ FONT_REGULAR_PATH = "Montserrat-VariableFont_wght.ttf"
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 BULLET_COLOR = (185, 185, 185)
-ORANGE = (255, 107, 53)
 
 # =========================
 # Font Sizes
 # =========================
-TITLE_FONT_SIZE = 32
-SUBTITLE_FONT_SIZE = 18
+TITLE_FONT_SIZE = 30
 BULLET_FONT_SIZE = 26
 
 # =========================
@@ -39,22 +37,15 @@ BULLET_FONT_SIZE = 26
 # =========================
 try:
     title_font = ImageFont.truetype(FONT_BOLD_PATH, TITLE_FONT_SIZE)
-    subtitle_font = ImageFont.truetype(FONT_REGULAR_PATH, SUBTITLE_FONT_SIZE)
     bullet_font = ImageFont.truetype(FONT_BOLD_PATH, BULLET_FONT_SIZE)
-    logo_font_prestige = ImageFont.truetype("Quicksand-VariableFont_wght.ttf", 36)
-    logo_font_360 = ImageFont.truetype(FONT_REGULAR_PATH, 36)
 except Exception as e:
     print(f"Error loading fonts: {e}")
     title_font = ImageFont.load_default()
-    subtitle_font = ImageFont.load_default()
     bullet_font = ImageFont.load_default()
-    logo_font_prestige = ImageFont.load_default()
-    logo_font_360 = ImageFont.load_default()
 
 # =========================
 # Layout Configuration
 # =========================
-HEADER_HEIGHT = 70
 FOOTER_HEIGHT = 140
 BULLET_GAP_Y = 38
 BULLET_DOT_OFFSET_X = 20
@@ -70,16 +61,6 @@ def cleanup_old_images():
             keys_to_delete.append(key)
     for key in keys_to_delete:
         del generated_images[key]
-
-
-def draw_header(draw, width):
-    """Dibuja la franja negra superior con el logo"""
-    draw.rectangle([(0, 0), (width, HEADER_HEIGHT)], fill=BLACK)
-    prestige_text = "Prestige"
-    draw.text((30, 18), prestige_text, font=logo_font_prestige, fill=ORANGE)
-    draw.text((155, 18), "360", font=logo_font_360, fill=WHITE)
-    tagline = "Commercial Design From Concept to Opening"
-    draw.text((250, 28), tagline, font=subtitle_font, fill=WHITE)
 
 
 def draw_footer(draw, width, height, title, bullets):
@@ -108,7 +89,7 @@ def draw_footer(draw, width, height, title, bullets):
 
 
 def process_image_from_base64(image_base64, title, bullets):
-    """Procesa la imagen desde base64"""
+    """Procesa la imagen desde base64 - NO dibuja header, solo footer"""
     image_data = base64.b64decode(image_base64)
     img = Image.open(io.BytesIO(image_data))
     
@@ -118,14 +99,14 @@ def process_image_from_base64(image_base64, title, bullets):
     width, height = img.size
     draw = ImageDraw.Draw(img)
     
-    draw_header(draw, width)
+    # Solo dibujamos el footer (el header ya está en el template)
     draw_footer(draw, width, height, title, bullets)
     
     return img
 
 
 def process_image_from_file(image_path, title, bullets):
-    """Procesa la imagen desde archivo"""
+    """Procesa la imagen desde archivo - NO dibuja header, solo footer"""
     if os.path.exists(image_path):
         img = Image.open(image_path)
     else:
@@ -137,7 +118,7 @@ def process_image_from_file(image_path, title, bullets):
     width, height = img.size
     draw = ImageDraw.Draw(img)
     
-    draw_header(draw, width)
+    # Solo dibujamos el footer (el header ya está en el template)
     draw_footer(draw, width, height, title, bullets)
     
     return img
