@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify, url_for
+from flask import Flask, request, send_file, jsonify
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
@@ -27,10 +27,10 @@ WHITE = (255, 255, 255)
 BULLET_COLOR = (185, 185, 185)
 
 # =========================
-# Font Sizes
+# Font Sizes - AJUSTADOS
 # =========================
-TITLE_FONT_SIZE = 30
-BULLET_FONT_SIZE = 26
+TITLE_FONT_SIZE = 38  # Aumentado de 32 a 38
+BULLET_FONT_SIZE = 24  # Reducido de 26 a 24 para mejor legibilidad
 
 # =========================
 # Load Fonts
@@ -44,12 +44,14 @@ except Exception as e:
     bullet_font = ImageFont.load_default()
 
 # =========================
-# Layout Configuration
+# Layout Configuration - AJUSTADOS
 # =========================
-FOOTER_HEIGHT = 140
-BULLET_GAP_Y = 38
-BULLET_DOT_OFFSET_X = 20
-BULLET_TEXT_OFFSET_X = 40
+FOOTER_HEIGHT = 160  # Aumentado de 140 a 160 para más espacio
+BULLET_GAP_Y = 40    # Aumentado de 38 a 40 para mejor separación
+BULLET_DOT_OFFSET_X = 30  # Aumentado de 20 a 30
+BULLET_TEXT_OFFSET_X = 55  # Aumentado de 40 a 55
+TITLE_TOP_MARGIN = 20  # Margen superior del título
+BULLET_START_OFFSET = 60  # Espacio entre título y primer bullet
 
 
 def cleanup_old_images():
@@ -63,65 +65,125 @@ def cleanup_old_images():
         del generated_images[key]
 
 
+def wrap_text(text, font, max_width):
+    """Divide el texto en múltiples líneas si excede el ancho máximo"""
+    words = text.split(' ')
+    lines = []
+    current_line = []
+    
+    for word in words:
+        test_line = ' '.join(current_line + [word])
+        bbox = font.getbbox(test_line)
+        width = bbox[2] - bbox[0]
+        
+        if width <= max_width:
+            current_line.append(word)
+        else:
+            if current_line:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+            else:
+                lines.append(word)
+    
+    if current_line:
+        lines.append(' '.join(current_line))
+    
+    return lines
+
+
 def draw_footer(draw, width, height, title, bullets):
     """Dibuja la franja negra inferior con título y bullets"""
     footer_y = height - FOOTER_HEIGHT
-    draw.rectangle([(0, footer_y), (width, height)], fill=BLACK)
-    title_y = footer_y + 15
-    draw.text((20, title_y), title.upper(), font=title_font, fill=WHITE)
     
-    bullet_start_y = title_y + 50
-    for i, text in enumerate(bullets):
-        if text:
-            line_y = bullet_start_y + (i * BULLET_GAP_Y)
+    # Dibujar rectángulo negro del footer
+    draw.rectangle([(0, footer_y), (width, height)], fill=BLACK)
+    
+    # Dibujar título
+    title_y = footer_y + TITLE_TOP_MARGIN
+    draw.text((30, title_y), title.upper(), font=title_font, fill=WHITE)
+    
+    # Calcular posición inicial de los bullets
+    bullet_start_y = title_y + BULLET_START_OFFSET
+    
+    # Ancho máximo para el texto de los bullets (deja margen a la derecha)
+    max_bullet_width = width - BULLET_TEXT_OFFSET_X - 40
+    
+    current_y = bullet_start_y
+    
+    # Dibujar cada bullet
+    for text in bullets:
+        if text and text.strip():  # Solo dibujar si hay texto
+            # Dividir el texto en líneas si es necesario
+            lines = wrap_text(text, bullet_font, max_bullet_width)
+            
+            # Dibujar el bullet point solo para la primera línea
             draw.text(
-                (BULLET_DOT_OFFSET_X, line_y),
+                (BULLET_DOT_OFFSET_X, current_y),
                 "•",
                 font=bullet_font,
                 fill=BULLET_COLOR
             )
-            draw.text(
-                (BULLET_TEXT_OFFSET_X, line_y),
-                text,
-                font=bullet_font,
-                fill=BULLET_COLOR
-            )
+            
+            # Dibujar cada línea del texto
+            for i, line in enumerate(lines):
+                draw.text(
+                    (BULLET_TEXT_OFFSET_X, current_y),
+                    line,
+                    font=bullet_font,
+                    fill=BULLET_COLOR
+                )
+                current_y += BULLET_GAP_Y  # Mover a la siguiente línea
+            
+            # Si el bullet solo tenía una línea, aún necesitamos mover el cursor
+            if len(lines) == 0:
+                current_y += BULLET_GAP_Y
 
 
 def process_image_from_base64(image_base64, title, bullets):
     """Procesa la imagen desde base64 - NO dibuja header, solo footer"""
-    image_data = base64.b64decode(image_base64)
-    img = Image.open(io.BytesIO(image_data))
-    
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
-    
-    width, height = img.size
-    draw = ImageDraw.Draw(img)
-    
-    # Solo dibujamos el footer (el header ya está en el template)
-    draw_footer(draw, width, height, title, bullets)
-    
-    return img
+    try:
+        # Decodificar imagen base64
+        image_data = base64.b64decode(image_base64)
+        img = Image.open(io.BytesIO(image_data))
+        
+        # Convertir a RGB si es necesario
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        width, height = img.size
+        draw = ImageDraw.Draw(img)
+        
+        # Solo dibujar el footer (el header ya está en el template)
+        draw_footer(draw, width, height, title, bullets)
+        
+        return img
+    except Exception as e:
+        print(f"Error processing base64 image: {e}")
+        raise
 
 
 def process_image_from_file(image_path, title, bullets):
     """Procesa la imagen desde archivo - NO dibuja header, solo footer"""
-    if os.path.exists(image_path):
-        img = Image.open(image_path)
-    else:
-        img = Image.open("template.jpg")
-    
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
-    
-    width, height = img.size
-    draw = ImageDraw.Draw(img)
-    
-    # Solo dibujamos el footer (el header ya está en el template)
-    draw_footer(draw, width, height, title, bullets)
-    
-    return img
+    try:
+        if os.path.exists(image_path):
+            img = Image.open(image_path)
+        else:
+            img = Image.open("template.jpg")
+        
+        # Convertir a RGB si es necesario
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        width, height = img.size
+        draw = ImageDraw.Draw(img)
+        
+        # Solo dibujar el footer (el header ya está en el template)
+        draw_footer(draw, width, height, title, bullets)
+        
+        return img
+    except Exception as e:
+        print(f"Error processing file image: {e}")
+        raise
 
 
 @app.route('/')
@@ -134,7 +196,10 @@ def home():
         <li>POST /generate - Genera imagen con título y bullets</li>
         <li>POST /generate-post - Genera imagen desde base64 (para n8n)</li>
         <li>GET /download/&lt;image_id&gt; - Descarga imagen generada</li>
+        <li>GET /health - Health check</li>
     </ul>
+    <h3>Estado:</h3>
+    <p>Server running OK - ''' + str(len(generated_images)) + ''' images in cache</p>
     '''
 
 
@@ -147,7 +212,11 @@ def generate():
         title = data.get('title', 'Title Here')
         bullets = data.get('bullets', ['Bullet point 1', 'Bullet point 2', 'Bullet point 3'])
         
-        img = process_image_from_file("template.jpg", title, bullets)
+        # Asegurar que tenemos exactamente 3 bullets
+        while len(bullets) < 3:
+            bullets.append('')
+        
+        img = process_image_from_file("template.jpg", title, bullets[:3])
         
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG', quality=95)
@@ -161,6 +230,7 @@ def generate():
         )
     
     except Exception as e:
+        print(f"Error in /generate: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -180,6 +250,7 @@ def generate_post():
         
         bullets = [bullet1, bullet2, bullet3]
         
+        # Procesar imagen
         if image_base64:
             img = process_image_from_base64(image_base64, title, bullets)
         else:
@@ -209,6 +280,7 @@ def generate_post():
         })
     
     except Exception as e:
+        print(f"Error in /generate-post: {e}")
         return jsonify({'error': str(e), 'success': False}), 500
 
 
@@ -231,14 +303,19 @@ def download_image(image_id):
         )
     
     except Exception as e:
+        print(f"Error in /download: {e}")
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'ok'})
+    return jsonify({
+        'status': 'ok',
+        'images_in_cache': len(generated_images),
+        'message': 'Prestige 360 Image Generator is running'
+    })
 
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False)
