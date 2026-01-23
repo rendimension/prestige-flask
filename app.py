@@ -1,90 +1,47 @@
-from flask import Flask, request, jsonify, send_from_directory
-import os
-from PIL import Image, ImageDraw, ImageFont, ImageOps
-import uuid
-import base64
-from io import BytesIO
+from PIL import ImageFont
 
-app = Flask(__name__)
+# =========================
+# Bullet style only
+# =========================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-POST_OUTPUT_DIR = os.path.join(BASE_DIR, 'post_output')
-TEMPLATE_PATH = os.path.join(BASE_DIR, 'template.jpg')
+# Gris claro para que no compita con el titulo
+BULLET_COLOR = (185, 185, 185)
 
-# FUENTES
-FONT_BOLD_PATH = os.path.join(BASE_DIR, 'Montserrat-Bold.ttf') 
-FONT_REGULAR_PATH = os.path.join(BASE_DIR, 'Quicksand-VariableFont_wght.ttf')
+# Tamaño y fuente bold solo para bullets
+BULLET_FONT_SIZE = 30  # deja el que ya usas, o ajusta 28 a 34
+bullet_font = ImageFont.truetype(FONT_BOLD_PATH, BULLET_FONT_SIZE)
 
-os.makedirs(POST_OUTPUT_DIR, exist_ok=True)
+# Espaciado
+BULLET_GAP_Y = 52      # separacion entre lineas
+BULLET_DOT_OFFSET_X = 0
+BULLET_TEXT_OFFSET_X = 24
 
-# GEOMETRÍA FINAL OPTIMIZADA (1080px total)
-CANVAS_SIZE = 1080
-FRAME_TOP_H = 135  # 12.5%
-IMG_H = 740        # Ajustado para dar más aire abajo
-FRAME_BOT_H = 205  # 19% (El nuevo margen amplio)
+def draw_bullets(draw, bullets, x, y):
+    """
+    bullets: lista de strings
+    x, y: posicion inicial del bloque de bullets
+    """
+    for i, text in enumerate(bullets):
+        line_y = y + (i * BULLET_GAP_Y)
 
-@app.route("/generate-post", methods=["POST"])
-def generate_post():
-    data = request.get_json()
-    if isinstance(data, list): data = data[0]
-    
-    title = data.get("title", "").upper().replace("STRATEGIC", "").replace("SUCCESS", "").strip()
-    bullets = [data.get("bullet1"), data.get("bullet2"), data.get("bullet3")]
-    img_b64 = data.get("image_base64", "")
+        # Punto bullet en bold gris claro
+        draw.text(
+            (x + BULLET_DOT_OFFSET_X, line_y),
+            "•",
+            font=bullet_font,
+            fill=BULLET_COLOR
+        )
 
-    try:
-        canvas = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (0, 0, 0))
+        # Texto bullet en bold gris claro
+        draw.text(
+            (x + BULLET_TEXT_OFFSET_X, line_y),
+            text,
+            font=bullet_font,
+            fill=BULLET_COLOR
+        )
 
-        # 1. Imagen Central
-        if img_b64:
-            if ',' in img_b64: img_b64 = img_b64.split(',', 1)[1]
-            img_raw = Image.open(BytesIO(base64.b64decode(img_b64)))
-            main_img = ImageOps.fit(img_raw, (CANVAS_SIZE, IMG_H), Image.Resampling.LANCZOS)
-            canvas.paste(main_img, (0, FRAME_TOP_H))
-
-        # 2. Logo Top
-        if os.path.exists(TEMPLATE_PATH):
-            temp = Image.open(TEMPLATE_PATH).convert("RGBA")
-            temp = temp.resize((CANVAS_SIZE, CANVAS_SIZE))
-            logo_zone = temp.crop((0, 0, CANVAS_SIZE, FRAME_TOP_H))
-            canvas.paste(logo_zone, (0, 0), logo_zone)
-
-        # 3. Textos (Título 22px / Bullets 20px)
-        f_title = ImageFont.truetype(FONT_BOLD_PATH, 22) if os.path.exists(FONT_BOLD_PATH) else ImageFont.load_default()
-        f_bullet = ImageFont.truetype(FONT_REGULAR_PATH, 20) if os.path.exists(FONT_REGULAR_PATH) else ImageFont.load_default()
-
-        draw = ImageDraw.Draw(canvas)
-        
-        # ELEVACIÓN DEL BLOQUE: Subimos el inicio del texto
-        # El área negra empieza en 875 (135 + 740). 
-        # Ponemos el cursor en 900 para que suba ese "renglón" de espacio.
-        y_cursor = (FRAME_TOP_H + IMG_H) + 25 
-        x_margin = 100 
-        
-        # Título
-        draw.text((x_margin, y_cursor), title[:65], font=f_title, fill="white")
-        
-        # Bullets
-        y_cursor += 40
-        for b in bullets:
-            clean_b = str(b).strip()
-            if clean_b and "spacer" not in clean_b.lower():
-                txt = clean_b.replace("•", "").strip()[:80]
-                draw.text((x_margin, y_cursor), f"•  {txt}", font=f_bullet, fill="white")
-                y_cursor += 32 # Interlineado amplio
-
-        filename = f"post_{uuid.uuid4().hex}.jpg"
-        save_path = os.path.join(POST_OUTPUT_DIR, filename)
-        canvas.save(save_path, "JPEG", quality=100, subsampling=0)
-        
-        return jsonify({"status": "success", "download_url": f"{request.url_root.rstrip('/')}/post_output/{filename}"})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/post_output/<path:filename>')
-def send_output(filename):
-    return send_from_directory(POST_OUTPUT_DIR, filename)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+# =========================
+# Usage example
+# =========================
+bullets = [bullet1, bullet2, bullet3]
+draw_bullets(draw, bullets, x=BULLET_X, y=BULLET_Y)
