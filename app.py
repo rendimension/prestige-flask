@@ -1,10 +1,17 @@
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file, jsonify, url_for
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
 import base64
+import uuid
+import time
 
 app = Flask(__name__)
+
+# =========================
+# Storage for generated images (in-memory, temporary)
+# =========================
+generated_images = {}
 
 # =========================
 # Font Configuration
@@ -17,8 +24,8 @@ FONT_REGULAR_PATH = "Montserrat-VariableFont_wght.ttf"
 # =========================
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
-BULLET_COLOR = (185, 185, 185)  # Gris claro para bullets
-ORANGE = (255, 107, 53)  # Color naranja para "Prestige"
+BULLET_COLOR = (185, 185, 185)
+ORANGE = (255, 107, 53)
 
 # =========================
 # Font Sizes
@@ -54,19 +61,23 @@ BULLET_DOT_OFFSET_X = 20
 BULLET_TEXT_OFFSET_X = 40
 
 
+def cleanup_old_images():
+    """Remove images older than 10 minutes"""
+    current_time = time.time()
+    keys_to_delete = []
+    for key, value in generated_images.items():
+        if current_time - value['timestamp'] > 600:  # 10 minutes
+            keys_to_delete.append(key)
+    for key in keys_to_delete:
+        del generated_images[key]
+
+
 def draw_header(draw, width):
     """Dibuja la franja negra superior con el logo"""
-    # Franja negra superior
     draw.rectangle([(0, 0), (width, HEADER_HEIGHT)], fill=BLACK)
-    
-    # Texto "Prestige" en estilo cursivo/elegante (naranja)
     prestige_text = "Prestige"
     draw.text((30, 18), prestige_text, font=logo_font_prestige, fill=ORANGE)
-    
-    # Texto "360" 
     draw.text((155, 18), "360", font=logo_font_360, fill=WHITE)
-    
-    # Tagline
     tagline = "Commercial Design From Concept to Opening"
     draw.text((250, 28), tagline, font=subtitle_font, fill=WHITE)
 
@@ -74,29 +85,20 @@ def draw_header(draw, width):
 def draw_footer(draw, width, height, title, bullets):
     """Dibuja la franja negra inferior con título y bullets"""
     footer_y = height - FOOTER_HEIGHT
-    
-    # Franja negra inferior
     draw.rectangle([(0, footer_y), (width, height)], fill=BLACK)
-    
-    # Título en blanco
     title_y = footer_y + 15
     draw.text((20, title_y), title.upper(), font=title_font, fill=WHITE)
     
-    # Bullets
     bullet_start_y = title_y + 50
     for i, text in enumerate(bullets):
-        if text:  # Solo dibujar si hay texto
+        if text:
             line_y = bullet_start_y + (i * BULLET_GAP_Y)
-            
-            # Punto bullet
             draw.text(
                 (BULLET_DOT_OFFSET_X, line_y),
                 "•",
                 font=bullet_font,
                 fill=BULLET_COLOR
             )
-            
-            # Texto del bullet
             draw.text(
                 (BULLET_TEXT_OFFSET_X, line_y),
                 text,
@@ -106,19 +108,16 @@ def draw_footer(draw, width, height, title, bullets):
 
 
 def process_image_from_base64(image_base64, title, bullets):
-    """Procesa la imagen desde base64 agregando header, footer y texto"""
-    # Decodificar imagen base64
+    """Procesa la imagen desde base64"""
     image_data = base64.b64decode(image_base64)
     img = Image.open(io.BytesIO(image_data))
     
-    # Convertir a RGB si es necesario
     if img.mode != 'RGB':
         img = img.convert('RGB')
     
     width, height = img.size
     draw = ImageDraw.Draw(img)
     
-    # Dibujar header y footer
     draw_header(draw, width)
     draw_footer(draw, width, height, title, bullets)
     
@@ -126,20 +125,18 @@ def process_image_from_base64(image_base64, title, bullets):
 
 
 def process_image_from_file(image_path, title, bullets):
-    """Procesa la imagen desde archivo agregando header, footer y texto"""
+    """Procesa la imagen desde archivo"""
     if os.path.exists(image_path):
         img = Image.open(image_path)
     else:
         img = Image.open("template.jpg")
     
-    # Convertir a RGB si es necesario
     if img.mode != 'RGB':
         img = img.convert('RGB')
     
     width, height = img.size
     draw = ImageDraw.Draw(img)
     
-    # Dibujar header y footer
     draw_header(draw, width)
     draw_footer(draw, width, height, title, bullets)
     
@@ -155,21 +152,8 @@ def home():
     <ul>
         <li>POST /generate - Genera imagen con título y bullets</li>
         <li>POST /generate-post - Genera imagen desde base64 (para n8n)</li>
+        <li>GET /download/&lt;image_id&gt; - Descarga imagen generada</li>
     </ul>
-    <h3>Ejemplo de uso:</h3>
-    <pre>
-    POST /generate
-    Content-Type: application/json
-    
-    {
-        "title": "Effective Space Planning Essentials",
-        "bullets": [
-            "Aesthetics don't ensure efficiency.",
-            "Easy navigation is crucial for visitors.",
-            "Contact us for transformative space design."
-        ]
-    }
-    </pre>
     '''
 
 
@@ -182,10 +166,8 @@ def generate():
         title = data.get('title', 'Title Here')
         bullets = data.get('bullets', ['Bullet point 1', 'Bullet point 2', 'Bullet point 3'])
         
-        # Usar template.jpg como base
         img = process_image_from_file("template.jpg", title, bullets)
         
-        # Guardar en buffer
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG', quality=95)
         img_buffer.seek(0)
@@ -203,45 +185,72 @@ def generate():
 
 @app.route('/generate-post', methods=['POST'])
 def generate_post():
-    """Endpoint para n8n con image_base64, title, bullet1, bullet2, bullet3"""
+    """Endpoint para n8n - devuelve download_url"""
     try:
+        cleanup_old_images()
+        
         data = request.get_json()
         
-        # Obtener datos del JSON (formato n8n)
         image_base64 = data.get('image_base64', '')
         title = data.get('title', 'Title Here')
         bullet1 = data.get('bullet1', '')
         bullet2 = data.get('bullet2', '')
         bullet3 = data.get('bullet3', '')
         
-        # Crear lista de bullets
         bullets = [bullet1, bullet2, bullet3]
         
-        # Procesar imagen
         if image_base64:
             img = process_image_from_base64(image_base64, title, bullets)
         else:
             img = process_image_from_file("template.jpg", title, bullets)
         
-        # Guardar en buffer
+        # Save to buffer
         img_buffer = io.BytesIO()
         img.save(img_buffer, format='JPEG', quality=95)
         img_buffer.seek(0)
         
-        # Convertir a base64 para devolver a n8n
-        img_buffer_for_base64 = io.BytesIO()
-        img.save(img_buffer_for_base64, format='JPEG', quality=95)
-        img_buffer_for_base64.seek(0)
-        result_base64 = base64.b64encode(img_buffer_for_base64.read()).decode('utf-8')
+        # Generate unique ID and store image
+        image_id = str(uuid.uuid4())
+        generated_images[image_id] = {
+            'data': img_buffer.getvalue(),
+            'timestamp': time.time()
+        }
+        
+        # Build download URL
+        base_url = request.host_url.rstrip('/')
+        download_url = f"{base_url}/download/{image_id}"
         
         return jsonify({
             'success': True,
-            'image_base64': result_base64,
+            'download_url': download_url,
+            'image_id': image_id,
             'message': 'Image generated successfully'
         })
     
     except Exception as e:
         return jsonify({'error': str(e), 'success': False}), 500
+
+
+@app.route('/download/<image_id>', methods=['GET'])
+def download_image(image_id):
+    """Download generated image by ID"""
+    try:
+        if image_id not in generated_images:
+            return jsonify({'error': 'Image not found or expired'}), 404
+        
+        image_data = generated_images[image_id]['data']
+        img_buffer = io.BytesIO(image_data)
+        img_buffer.seek(0)
+        
+        return send_file(
+            img_buffer,
+            mimetype='image/jpeg',
+            as_attachment=False,
+            download_name=f'prestige360_{image_id}.jpg'
+        )
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/health')
