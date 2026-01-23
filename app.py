@@ -46,7 +46,7 @@ except Exception as e:
 # =========================
 # Layout Configuration - AJUSTADOS
 # =========================
-FOOTER_HEIGHT = 160  # Aumentado de 140 a 160 para más espacio
+FOOTER_HEIGHT = 180  # Aumentado de 140 a 160 para más espacio
 BULLET_GAP_Y = 40    # Aumentado de 38 a 40 para mejor separación
 BULLET_DOT_OFFSET_X = 30  # Aumentado de 20 a 30
 BULLET_TEXT_OFFSET_X = 55  # Aumentado de 40 a 55
