@@ -53,6 +53,15 @@ BULLET_TEXT_OFFSET_X = 55  # Aumentado de 40 a 55
 TITLE_TOP_MARGIN = 20  # Margen superior del título
 BULLET_START_OFFSET = 60  # Espacio entre título y primer bullet
 
+# =========================
+# Photo Placement (Template) - NUEVO
+# =========================
+PHOTO_LEFT_MARGIN = 60
+PHOTO_RIGHT_MARGIN = 60
+PHOTO_TOP = 210              # <<< OFFSET 210px hacia abajo (deja espacio para header)
+PHOTO_BOTTOM_PADDING = 30    # espacio antes del footer
+
+
 
 def cleanup_old_images():
     """Remove images older than 10 minutes"""
@@ -89,6 +98,45 @@ def wrap_text(text, font, max_width):
         lines.append(' '.join(current_line))
     
     return lines
+
+def place_photo_on_template(template_img, photo_img):
+    template_img = template_img.convert("RGB")
+    photo_img = photo_img.convert("RGB")
+
+    tpl_w, tpl_h = template_img.size
+
+    left = PHOTO_LEFT_MARGIN
+    right = tpl_w - PHOTO_RIGHT_MARGIN
+    top = PHOTO_TOP
+    bottom = tpl_h - FOOTER_HEIGHT - PHOTO_BOTTOM_PADDING
+
+    box_w = right - left
+    box_h = bottom - top
+
+    pw, ph = photo_img.size
+    box_ratio = box_w / box_h
+    photo_ratio = pw / ph
+
+    # Resize tipo "cover"
+    if photo_ratio > box_ratio:
+        new_h = box_h
+        new_w = int(new_h * photo_ratio)
+    else:
+        new_w = box_w
+        new_h = int(new_w / photo_ratio)
+
+    photo_resized = photo_img.resize((new_w, new_h), Image.LANCZOS)
+
+    # Crop centrado
+    crop_left = (new_w - box_w) // 2
+    crop_top = (new_h - box_h) // 2
+    photo_cropped = photo_resized.crop(
+        (crop_left, crop_top, crop_left + box_w, crop_top + box_h)
+    )
+
+    template_img.paste(photo_cropped, (left, top))
+    return template_img
+
 
 
 def draw_footer(draw, width, height, title, bullets):
@@ -140,50 +188,52 @@ def draw_footer(draw, width, height, title, bullets):
 
 
 def process_image_from_base64(image_base64, title, bullets):
-    """Procesa la imagen desde base64 - NO dibuja header, solo footer"""
+    """Procesa la imagen desde base64 - USA TEMPLATE + pega foto + footer"""
     try:
-        # Decodificar imagen base64
+        # 1) Abrir foto (la que viene de n8n)
         image_data = base64.b64decode(image_base64)
-        img = Image.open(io.BytesIO(image_data))
-        
-        # Convertir a RGB si es necesario
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        
+        photo = Image.open(io.BytesIO(image_data))
+
+        # 2) Abrir template (con header/logo)
+        template = Image.open("template.jpg")
+
+        # 3) Pegar foto dentro del template (con offset PHOTO_TOP=210)
+        img = place_photo_on_template(template, photo)
+
+        # 4) Dibujar footer
         width, height = img.size
         draw = ImageDraw.Draw(img)
-        
-        # Solo dibujar el footer (el header ya está en el template)
         draw_footer(draw, width, height, title, bullets)
-        
+
         return img
     except Exception as e:
         print(f"Error processing base64 image: {e}")
         raise
 
 
+
 def process_image_from_file(image_path, title, bullets):
-    """Procesa la imagen desde archivo - NO dibuja header, solo footer"""
+    """Procesa la imagen desde archivo - USA TEMPLATE + pega foto + footer"""
     try:
-        if os.path.exists(image_path):
-            img = Image.open(image_path)
+        template = Image.open("template.jpg")
+
+        # Si te pasan una foto real (no el mismo template), pégala dentro del template
+        if os.path.exists(image_path) and image_path != "template.jpg":
+            photo = Image.open(image_path)
+            img = place_photo_on_template(template, photo)
         else:
-            img = Image.open("template.jpg")
-        
-        # Convertir a RGB si es necesario
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        
+            # Si no hay foto, solo usa el template tal cual
+            img = template.convert("RGB")
+
         width, height = img.size
         draw = ImageDraw.Draw(img)
-        
-        # Solo dibujar el footer (el header ya está en el template)
         draw_footer(draw, width, height, title, bullets)
-        
+
         return img
     except Exception as e:
         print(f"Error processing file image: {e}")
         raise
+
 
 
 @app.route('/')
