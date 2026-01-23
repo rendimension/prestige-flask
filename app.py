@@ -2,6 +2,7 @@ from flask import Flask, request, send_file, jsonify
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
+import base64
 
 app = Flask(__name__)
 
@@ -84,28 +85,48 @@ def draw_footer(draw, width, height, title, bullets):
     # Bullets
     bullet_start_y = title_y + 50
     for i, text in enumerate(bullets):
-        line_y = bullet_start_y + (i * BULLET_GAP_Y)
-        
-        # Punto bullet
-        draw.text(
-            (BULLET_DOT_OFFSET_X, line_y),
-            "•",
-            font=bullet_font,
-            fill=BULLET_COLOR
-        )
-        
-        # Texto del bullet
-        draw.text(
-            (BULLET_TEXT_OFFSET_X, line_y),
-            text,
-            font=bullet_font,
-            fill=BULLET_COLOR
-        )
+        if text:  # Solo dibujar si hay texto
+            line_y = bullet_start_y + (i * BULLET_GAP_Y)
+            
+            # Punto bullet
+            draw.text(
+                (BULLET_DOT_OFFSET_X, line_y),
+                "•",
+                font=bullet_font,
+                fill=BULLET_COLOR
+            )
+            
+            # Texto del bullet
+            draw.text(
+                (BULLET_TEXT_OFFSET_X, line_y),
+                text,
+                font=bullet_font,
+                fill=BULLET_COLOR
+            )
 
 
-def process_image(image_path, title, bullets):
-    """Procesa la imagen agregando header, footer y texto"""
-    # Abrir imagen template o la proporcionada
+def process_image_from_base64(image_base64, title, bullets):
+    """Procesa la imagen desde base64 agregando header, footer y texto"""
+    # Decodificar imagen base64
+    image_data = base64.b64decode(image_base64)
+    img = Image.open(io.BytesIO(image_data))
+    
+    # Convertir a RGB si es necesario
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    width, height = img.size
+    draw = ImageDraw.Draw(img)
+    
+    # Dibujar header y footer
+    draw_header(draw, width)
+    draw_footer(draw, width, height, title, bullets)
+    
+    return img
+
+
+def process_image_from_file(image_path, title, bullets):
+    """Procesa la imagen desde archivo agregando header, footer y texto"""
     if os.path.exists(image_path):
         img = Image.open(image_path)
     else:
@@ -133,6 +154,7 @@ def home():
     <h3>Endpoints:</h3>
     <ul>
         <li>POST /generate - Genera imagen con título y bullets</li>
+        <li>POST /generate-post - Genera imagen desde base64 (para n8n)</li>
     </ul>
     <h3>Ejemplo de uso:</h3>
     <pre>
@@ -153,6 +175,7 @@ def home():
 
 @app.route('/generate', methods=['POST'])
 def generate():
+    """Endpoint simple con title y bullets array"""
     try:
         data = request.get_json()
         
@@ -160,7 +183,7 @@ def generate():
         bullets = data.get('bullets', ['Bullet point 1', 'Bullet point 2', 'Bullet point 3'])
         
         # Usar template.jpg como base
-        img = process_image("template.jpg", title, bullets)
+        img = process_image_from_file("template.jpg", title, bullets)
         
         # Guardar en buffer
         img_buffer = io.BytesIO()
@@ -176,6 +199,49 @@ def generate():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/generate-post', methods=['POST'])
+def generate_post():
+    """Endpoint para n8n con image_base64, title, bullet1, bullet2, bullet3"""
+    try:
+        data = request.get_json()
+        
+        # Obtener datos del JSON (formato n8n)
+        image_base64 = data.get('image_base64', '')
+        title = data.get('title', 'Title Here')
+        bullet1 = data.get('bullet1', '')
+        bullet2 = data.get('bullet2', '')
+        bullet3 = data.get('bullet3', '')
+        
+        # Crear lista de bullets
+        bullets = [bullet1, bullet2, bullet3]
+        
+        # Procesar imagen
+        if image_base64:
+            img = process_image_from_base64(image_base64, title, bullets)
+        else:
+            img = process_image_from_file("template.jpg", title, bullets)
+        
+        # Guardar en buffer
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format='JPEG', quality=95)
+        img_buffer.seek(0)
+        
+        # Convertir a base64 para devolver a n8n
+        img_buffer_for_base64 = io.BytesIO()
+        img.save(img_buffer_for_base64, format='JPEG', quality=95)
+        img_buffer_for_base64.seek(0)
+        result_base64 = base64.b64encode(img_buffer_for_base64.read()).decode('utf-8')
+        
+        return jsonify({
+            'success': True,
+            'image_base64': result_base64,
+            'message': 'Image generated successfully'
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False}), 500
 
 
 @app.route('/health')
