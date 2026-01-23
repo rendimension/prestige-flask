@@ -1,6 +1,11 @@
 from PIL import ImageFont
 
 # =========================
+# Font Configuration
+# =========================
+FONT_BOLD_PATH = "Montserrat-Bold.ttf"  # La fuente está en la raíz del proyecto
+
+# =========================
 # Bullet style only
 # =========================
 
