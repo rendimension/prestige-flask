@@ -46,13 +46,13 @@ except Exception as e:
 # =========================
 # Layout Configuration - AJUSTADOS
 # =========================
-FOOTER_HEIGHT = 180  # Aumentado de 140 a 160 para más espacio
+FOOTER_HEIGHT = 210  # Aumentado de 140 a 160 para más espacio
 BULLET_GAP_Y = 40    # Aumentado de 38 a 40 para mejor separación
 BULLET_DOT_OFFSET_X = 120  # Aumentado de 20 a 30
 BULLET_TEXT_OFFSET_X = 135  # Aumentado de 40 a 55
 TITLE_TOP_MARGIN = 10  # Margen superior del título
 BULLET_START_OFFSET = 60  # Espacio entre título y primer bullet
-RIGHT_TEXT_MARGIN = 140  # margen derecho para alinear título y bullets
+RIGHT_TEXT_MARGIN = 120  # margen derecho para alinear título y bullets
 FOOTER_BOTTOM_SAFE_PADDING = 60  # nuevo (sube si quieres más aire)
 
 
