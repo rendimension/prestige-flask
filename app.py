@@ -52,6 +52,7 @@ BULLET_DOT_OFFSET_X = 120  # Aumentado de 20 a 30
 BULLET_TEXT_OFFSET_X = 135  # Aumentado de 40 a 55
 TITLE_TOP_MARGIN = 10  # Margen superior del título
 BULLET_START_OFFSET = 60  # Espacio entre título y primer bullet
+RIGHT_TEXT_MARGIN = 60  # margen derecho para alinear título y bullets
 FOOTER_BOTTOM_SAFE_PADDING = 25  # nuevo (sube si quieres más aire)
 
 
@@ -150,13 +151,19 @@ def draw_footer(draw, width, height, title, bullets):
     
     # Dibujar título
     title_y = footer_y + TITLE_TOP_MARGIN
-    draw.text((30, title_y), title.upper(), font=title_font, fill=WHITE)
+    title_text = title.upper()
+    bbox = title_font.getbbox(title_text)
+    title_w = bbox[2] - bbox[0]
+
+    title_x = width - RIGHT_TEXT_MARGIN - title_w
+    draw.text((title_x, title_y), title_text, font=title_font, fill=WHITE)
+
     
     # Calcular posición inicial de los bullets
     bullet_start_y = title_y + BULLET_START_OFFSET
     
     # Ancho máximo para el texto de los bullets (deja margen a la derecha)
-    max_bullet_width = width - BULLET_TEXT_OFFSET_X - 40
+    max_bullet_width = (width - RIGHT_TEXT_MARGIN) - BULLET_TEXT_OFFSET_X - 40
     
     current_y = bullet_start_y
     max_y = height - FOOTER_BOTTOM_SAFE_PADDING
