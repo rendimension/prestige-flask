@@ -48,17 +48,17 @@ except Exception as e:
 # =========================
 FOOTER_HEIGHT = 180  # Aumentado de 140 a 160 para más espacio
 BULLET_GAP_Y = 40    # Aumentado de 38 a 40 para mejor separación
-BULLET_DOT_OFFSET_X = 30  # Aumentado de 20 a 30
-BULLET_TEXT_OFFSET_X = 55  # Aumentado de 40 a 55
-TITLE_TOP_MARGIN = 20  # Margen superior del título
+BULLET_DOT_OFFSET_X = 120  # Aumentado de 20 a 30
+BULLET_TEXT_OFFSET_X = 135  # Aumentado de 40 a 55
+TITLE_TOP_MARGIN = 10  # Margen superior del título
 BULLET_START_OFFSET = 60  # Espacio entre título y primer bullet
 
 # =========================
 # Photo Placement (Template) - NUEVO
 # =========================
-PHOTO_LEFT_MARGIN = 60
-PHOTO_RIGHT_MARGIN = 60
-PHOTO_TOP = 210              # <<< OFFSET 210px hacia abajo (deja espacio para header)
+PHOTO_LEFT_MARGIN = 0
+PHOTO_RIGHT_MARGIN = 0
+PHOTO_TOP = 230              # <<< OFFSET 210px hacia abajo (deja espacio para header)
 PHOTO_BOTTOM_PADDING = 30    # espacio antes del footer
 
 
