@@ -48,8 +48,8 @@ except Exception as e:
 # =========================
 FOOTER_HEIGHT = 230  # Aumentado de 140 a 160 para más espacio
 BULLET_GAP_Y = 40    # Aumentado de 38 a 40 para mejor separación
-BULLET_DOT_OFFSET_X = 120  # Aumentado de 20 a 30
-BULLET_TEXT_OFFSET_X = 135  # Aumentado de 40 a 55
+BULLET_DOT_OFFSET_X = 180  # Aumentado de 20 a 30
+BULLET_TEXT_OFFSET_X = 205  # Aumentado de 40 a 55
 TITLE_TOP_MARGIN = 10  # Margen superior del título
 BULLET_START_OFFSET = 60  # Espacio entre título y primer bullet
 RIGHT_TEXT_MARGIN = 100  # margen derecho para alinear título y bullets
