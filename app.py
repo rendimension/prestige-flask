@@ -29,8 +29,8 @@ BULLET_COLOR = (185, 185, 185)
 # =========================
 # Font Sizes - AJUSTADOS
 # =========================
-TITLE_FONT_SIZE = 38  # Aumentado de 32 a 38
-BULLET_FONT_SIZE = 24  # Reducido de 26 a 24 para mejor legibilidad
+TITLE_FONT_SIZE = 42  # Aumentado de 32 a 38
+BULLET_FONT_SIZE = 35  # Reducido de 26 a 24 para mejor legibilidad
 
 # =========================
 # Load Fonts
@@ -52,6 +52,8 @@ BULLET_DOT_OFFSET_X = 120  # Aumentado de 20 a 30
 BULLET_TEXT_OFFSET_X = 135  # Aumentado de 40 a 55
 TITLE_TOP_MARGIN = 10  # Margen superior del título
 BULLET_START_OFFSET = 60  # Espacio entre título y primer bullet
+FOOTER_BOTTOM_SAFE_PADDING = 25  # nuevo (sube si quieres más aire)
+
 
 # =========================
 # Photo Placement (Template) - NUEVO
@@ -157,6 +159,8 @@ def draw_footer(draw, width, height, title, bullets):
     max_bullet_width = width - BULLET_TEXT_OFFSET_X - 40
     
     current_y = bullet_start_y
+    max_y = height - FOOTER_BOTTOM_SAFE_PADDING
+
     
     # Dibujar cada bullet
     for text in bullets:
